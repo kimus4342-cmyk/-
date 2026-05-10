@@ -9,18 +9,19 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.prompt import Confirm
 
 from pipeline import run_pipeline
 
 load_dotenv()
-console = Console(legacy_windows=False)
+console = Console(legacy_windows=False, force_terminal=True)
 
 
 def save_output(content: str, topic: str) -> str:
+    existing = len([f for f in os.listdir(".") if f.startswith("bloomi_") and f.endswith(".md")])
+    number = f"{existing + 1:03d}"
     safe_name = re.sub(r"[^\w가-힣]", "_", topic)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"bloomi_{safe_name}_{timestamp}.md"
+    filename = f"bloomi_{number}_{safe_name}_{timestamp}.md"
     with open(filename, "w", encoding="utf-8") as f:
         f.write(f"# BLOOMI 큐레이션 — {topic}\n\n")
         f.write(content)
@@ -51,9 +52,8 @@ def main():
         padding=(1, 3),
     ))
 
-    if Confirm.ask("\n결과를 .md 파일로 저장할까요?", default=True):
-        filename = save_output(article, research.topic)
-        console.print(f"[green]저장 완료:[/green] {filename}")
+    filename = save_output(article, research.topic)
+    console.print(f"[green]저장 완료:[/green] {filename}")
 
 
 if __name__ == "__main__":

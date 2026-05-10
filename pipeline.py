@@ -9,7 +9,7 @@ from research_agent import run_research_agent
 from writing_agent import run_writing_agent
 from review_agent import run_review_agent
 
-console = Console(legacy_windows=False)
+console = Console(legacy_windows=False, force_terminal=True)
 
 
 def run_pipeline() -> tuple[str, ResearchOutput]:

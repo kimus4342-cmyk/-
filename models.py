@@ -1,25 +1,27 @@
-from dataclasses import dataclass
+from pydantic import BaseModel, field_validator
 
-
-@dataclass
-class Product:
+class Product(BaseModel):
     name: str
     feature: str
     price: str
     url: str
+    ingredients: str = ""  # 주요 성분 목록 (레티놀 농도 + 보습/진정 성분 등)
 
-
-@dataclass
-class ResearchOutput:
+class ResearchOutput(BaseModel):
     topic: str
     skin_concern: str
-    core_message: str   # 글 전체가 전달할 핵심 메시지 1~3줄
+    core_message: str
     key_insights: str
+    editorial_angle: str = ""  # 각도 유형 + 선택 이유 + 오프닝 훅
     products: list[Product]
 
-
-@dataclass
-class ReviewResult:
+class ReviewResult(BaseModel):
     score: int
     feedback: str
     final_article: str
+
+    @field_validator("score")
+    def score_range(cls, v):
+        if not (1 <= v <= 10):
+            raise ValueError(f"점수는 1~10 사이여야 해요. 받은 값: {v}")
+        return v
