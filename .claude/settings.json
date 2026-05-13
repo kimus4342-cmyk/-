@@ -1,11 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell($env:PYTHONUTF8 = \"1\"; $env:PYTHONIOENCODING = \"utf-8\"; cd \"c:\\\\Users\\\\qkrrk\\\\OneDrive\\\\바탕 화면\\\\BLOOMI\"; .venv\\\\Scripts\\\\python main.py)",
-      "PowerShell(cd \"c:\\\\Users\\\\qkrrk\\\\OneDrive\\\\바탕 화면\\\\BLOOMI\"; $env:PYTHONIOENCODING=\"utf-8\"; .\\\\.venv\\\\Scripts\\\\python.exe main.py)"
-    ],
-    "additionalDirectories": [
-      "C:\\Users\\qkrrk\\OneDrive\\���� ȭ��\\BLOOMI"
+      "PowerShell($env:PYTHONUTF8 = \"1\"; $env:PYTHONIOENCODING = \"utf-8\"; .venv\\Scripts\\python main.py)",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; .\\.venv\\Scripts\\python.exe main.py)"
     ]
   }
 }
