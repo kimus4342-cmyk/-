@@ -17,11 +17,11 @@ console = Console(legacy_windows=False, force_terminal=True)
 
 
 def save_output(content: str, topic: str) -> str:
-    existing = len([f for f in os.listdir(".") if f.startswith("bloomi_") and f.endswith(".md")])
-    number = f"{existing + 1:03d}"
     safe_name = re.sub(r"[^\w가-힣]", "_", topic)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M")
-    filename = f"bloomi_{number}_{safe_name}_{timestamp}.md"
+    date = datetime.now().strftime("%Y%m%d")
+    existing = len([f for f in os.listdir(".") if re.match(rf"{re.escape(safe_name)}_{date}_\d{{3}}\.md", f)])
+    number = f"{existing + 1:03d}"
+    filename = f"{safe_name}_{date}_{number}.md"
     with open(filename, "w", encoding="utf-8") as f:
         f.write(f"# BLOOMI 큐레이션 — {topic}\n\n")
         f.write(content)
