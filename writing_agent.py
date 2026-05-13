@@ -13,7 +13,16 @@ def run_writing_agent(research: ResearchOutput) -> str:
             + (f"\n     주요 성분: {p.ingredients}" if p.ingredients else "")
             for i, p in enumerate(research.products)
         )
-        product_block = f"[추천 제품 목록 — 성분 포함]:\n{product_lines}"
+        product_block = (
+            f"[추천 제품 목록 — 성분 포함]:\n{product_lines}\n\n"
+            "Pick 추천 섹션 작성 지침:\n"
+            "- 각 제품마다 반드시 3문장으로 소개합니다.\n"
+            "  ① 이 제품의 핵심 성분 조합과 농도가 주제 성분에 어떻게 작용하는지\n"
+            "  ② 다른 제품과 구별되는 이 제품만의 차별점 (포장·농도·조합·사용감 등)\n"
+            "  ③ 어떤 피부 타입·고민에 가장 잘 맞는지\n"
+            "- 제품명을 첫 문장에 반드시 명시합니다.\n"
+            "- 성분표의 '주요 성분'을 근거로 작성하고, 근거 없는 효과 주장은 금지합니다."
+        )
     else:
         product_block = (
             "[추천 제품 목록]: 실제 제품 정보를 확보하지 못했습니다.\n"
@@ -28,7 +37,7 @@ def run_writing_agent(research: ResearchOutput) -> str:
 타겟 독자: 40-50대 한국 여성 (피부 고민: {research.skin_concern})
 핵심 메시지: {research.core_message}
 피해야 할 표현: 과장 광고, 단정적 표현, 즉각 효과 주장
-글 길이: 1,500~2,500자
+글 길이: 2,000~3,000자
 {angle_block}
 
 [임상 인사이트 — 중간 섹션 2~3에 녹여줘]:

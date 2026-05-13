@@ -7,10 +7,15 @@ from config import RESEARCH_MODEL, RESEARCH_MAX_TOKENS, RESEARCH_SYSTEM_PROMPT
 console = Console(legacy_windows=False)
 
 _PLACEHOLDER_NAMES = {"제품 a", "제품 b", "제품 c", "제품a", "제품b", "제품c"}
+_PLACEHOLDER_KEYWORDS = ["브랜드명", "제품명", "정확한", "플레이스홀더", "브랜드 +", "example", "sample"]
 
 def _is_placeholder(name: str) -> bool:
     n = name.strip().lower()
-    return n in _PLACEHOLDER_NAMES or n.startswith("[") or "브랜드명" in n or "제품명" in n
+    if n in _PLACEHOLDER_NAMES:
+        return True
+    if n.startswith("[") or n.startswith("("):
+        return True
+    return any(kw in n for kw in _PLACEHOLDER_KEYWORDS)
 
 _USER_PROMPT = "지금 4050 한국 여성에게 가장 핫한 화장품 성분 트렌드를 조사하고 주제를 하나 선정해줘."
 
