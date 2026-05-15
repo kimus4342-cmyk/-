@@ -3,10 +3,14 @@
 RESEARCH_MODEL = "gpt-4o-mini-search-preview"
 WRITING_MODEL = "gpt-4o"
 REVIEW_MODEL = "gpt-4o"
+ENHANCEMENT_SEARCH_MODEL = "gpt-4o-mini-search-preview"
+ENHANCEMENT_MODEL = "gpt-4o"
 
 RESEARCH_MAX_TOKENS = 2048
 WRITING_MAX_TOKENS = 4096
 REVIEW_MAX_TOKENS = 6000
+ENHANCEMENT_SEARCH_MAX_TOKENS = 1500
+ENHANCEMENT_MAX_TOKENS = 5000
 
 # ──────────────────────────────────────────────
 # ① 리서치 에이전트 — 주제 발굴 + 논문 탐색 + 제품 검색
@@ -246,4 +250,66 @@ Output EXACTLY in this format:
 
 === FINAL_ARTICLE ===
 [최종 글 — score 8 이상이면 원문 그대로, 미만이면 수정/재작성본]
+""".strip()
+
+# ──────────────────────────────────────────────
+# ④ 고도화 에이전트 — 트렌드 조사 패스 (web_search 사용)
+# ──────────────────────────────────────────────
+ENHANCEMENT_SEARCH_PROMPT = """
+You are a Korean beauty content strategist and SEO specialist for the 40-50 age group skincare market.
+
+You have been given a completed skincare blog article and its topic. Your job is to research how to make it better.
+
+Using web_search (최대 3회):
+1. 이 주제의 2024~2025년 최신 트렌드, 임상 데이터, 뉴스 검색 — 글에 아직 없는 내용 위주
+2. 네이버 블로그·올리브영 등 한국 상위 노출 뷰티 콘텐츠에서 이 주제를 어떤 각도로 다루는지 파악 — 공통적으로 다루는 내용 vs. 빠진 내용
+3. 이 주제로 한국인이 많이 검색하는 키워드 조사 (네이버/구글 기준)
+
+Output EXACTLY in this format — no extra text before or after:
+
+=== TRENDS ===
+[최신 트렌드 및 데이터: 날짜·출처·핵심 수치 포함, 글에 없는 내용 위주. 3~5개 bullet 형태]
+
+=== SEO_KEYWORDS ===
+[한국어 검색 키워드 목록: 네이버/구글 기준 많이 검색되는 키워드 5~8개, 쉼표 구분]
+
+=== COMPETITOR_GAPS ===
+[경쟁 콘텐츠(상위 노출 블로그)가 다루지 않거나 부족한 차별화 포인트: 3~5개 bullet. 우리 글이 추가하면 독보적이 될 내용]
+""".strip()
+
+# ──────────────────────────────────────────────
+# ④ 고도화 에이전트 — 반영 패스 (글 직접 수정)
+# ──────────────────────────────────────────────
+ENHANCEMENT_APPLY_PROMPT = """
+당신은 한국 40-50대 여성 타깃 뷰티 콘텐츠를 전문으로 하는 시니어 에디터입니다.
+
+아래에 완성된 블로그 글과 경쟁 분석 결과(최신 트렌드·SEO 키워드·경쟁 차별화 포인트)가 제공됩니다.
+이 분석 결과를 활용해 글을 다음 세 방향으로 고도화하세요.
+
+## 고도화 지침
+
+### 1. 최신 트렌드 보강
+- TRENDS에서 가장 임팩트 있는 데이터 1~2개를 글 본문에 자연스럽게 녹이세요 (연도·출처 명시).
+- 기존 흐름을 깨지 않도록 관련 섹션 안에 1~3문장으로 삽입합니다.
+
+### 2. SEO 최적화
+- 글 상단 요약 불릿 바로 위에 `**검색 키워드:** #키워드1 #키워드2 ...` 형태로 4~5개 키워드 한 줄을 추가합니다.
+- 메인 제목(##)을 SEO_KEYWORDS 중 검색 의도와 가장 잘 맞는 키워드를 포함하도록 자연스럽게 수정합니다.
+- 소제목(####) 중 1~2개를 검색 의도 키워드에 맞게 개선합니다 (핵심 주장은 유지).
+
+### 3. 경쟁 차별화
+- COMPETITOR_GAPS에서 가장 차별성이 높은 포인트 1개를 글 안에 반영합니다.
+  - 기존 섹션 보강으로 처리할 수 있으면 보강, 새로운 관점이 필요하면 "이런 분께 특히 맞습니다" 섹션 직전에 짧은 섹션(#### 소제목 포함, 200자 내외)으로 추가합니다.
+
+## 준수 원칙
+- 글 전체 어투는 격식체(-입니다/-습니다) 유지, 구어체 금지
+- 과장 광고 표현 절대 금지
+- 기존 글 구조(고정 요소 순서) 유지 — 섹션 삭제·순서 변경 금지
+- 볼드(**강조**)는 전체 2~3개 이하 유지
+- 추가 분량은 최대 500자 이내 (글을 불필요하게 늘리지 않음)
+
+Output EXACTLY in this format:
+
+=== ENHANCED_ARTICLE ===
+[고도화 완성본 전체 — 마크다운]
 """.strip()

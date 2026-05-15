@@ -25,3 +25,10 @@ class ReviewResult(BaseModel):
         if not (1 <= v <= 10):
             raise ValueError(f"점수는 1~10 사이여야 해요. 받은 값: {v}")
         return v
+
+
+class EnhancementResult(BaseModel):
+    trends_found: str
+    seo_keywords: str
+    competitor_gaps: str
+    enhanced_article: str

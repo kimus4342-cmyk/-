@@ -36,7 +36,7 @@ def main():
 
     console.print(Panel(
         "[bold]BLOOMI[/bold] — 4050 뷰티 큐레이션 멀티 에이전트\n"
-        "[dim]리서치 에이전트 → 작성 에이전트 → 검수 에이전트[/dim]",
+        "[dim]리서치 에이전트 → 작성 에이전트 → 검수 에이전트 → 고도화 에이전트[/dim]",
         border_style="dark_orange",
         padding=(1, 4),
     ))

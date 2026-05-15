@@ -8,6 +8,7 @@ from models import ResearchOutput
 from research_agent import run_research_agent
 from writing_agent import run_writing_agent
 from review_agent import run_review_agent
+from enhancement_agent import run_enhancement_agent
 
 console = Console(legacy_windows=False, force_terminal=True)
 
@@ -48,7 +49,19 @@ def run_pipeline() -> tuple[str, ResearchOutput]:
         border_style="magenta",
     ))
 
-    return review.final_article, research
+    # ④ 고도화 에이전트
+    with _spin("트렌드·SEO·경쟁 분석 및 고도화 중..."):
+        enhancement = run_enhancement_agent(review.final_article, research)
+
+    console.print(Panel(
+        f"[bold]SEO 키워드:[/bold] {enhancement.seo_keywords[:120]}{'...' if len(enhancement.seo_keywords) > 120 else ''}\n\n"
+        f"[bold]차별화 포인트:[/bold]\n{enhancement.competitor_gaps[:200]}{'...' if len(enhancement.competitor_gaps) > 200 else ''}\n\n"
+        f"[dim]고도화 완료 — {len(enhancement.enhanced_article):,}자[/dim]",
+        title="[bold green]④ 고도화 에이전트 완료[/bold green]",
+        border_style="green",
+    ))
+
+    return enhancement.enhanced_article, research
 
 
 @contextmanager
