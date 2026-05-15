@@ -2,12 +2,19 @@ import openai
 from rich.console import Console
 
 from models import ResearchOutput, Product
-from config import RESEARCH_MODEL, RESEARCH_MAX_TOKENS, RESEARCH_SYSTEM_PROMPT
+from config import (
+    RESEARCH_MODEL,
+    RESEARCH_MAX_TOKENS,
+    RESEARCH_SYSTEM_PROMPT,
+    TOPIC_PROPOSAL_PROMPT,
+    TOPIC_PROPOSAL_MAX_TOKENS,
+)
 
 console = Console(legacy_windows=False)
 
 _PLACEHOLDER_NAMES = {"제품 a", "제품 b", "제품 c", "제품a", "제품b", "제품c"}
 _PLACEHOLDER_KEYWORDS = ["브랜드명", "제품명", "정확한", "플레이스홀더", "브랜드 +", "example", "sample"]
+
 
 def _is_placeholder(name: str) -> bool:
     n = name.strip().lower()
@@ -17,21 +24,55 @@ def _is_placeholder(name: str) -> bool:
         return True
     return any(kw in n for kw in _PLACEHOLDER_KEYWORDS)
 
-_USER_PROMPT = "지금 4050 한국 여성에게 가장 핫한 화장품 성분 트렌드를 조사하고 주제를 하나 선정해줘."
+
+def run_topic_proposal() -> list[dict]:
+    """주제 후보 3개를 제안하고 반환."""
+    client = openai.OpenAI()
+    response = client.chat.completions.create(
+        model=RESEARCH_MODEL,
+        max_tokens=TOPIC_PROPOSAL_MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": TOPIC_PROPOSAL_PROMPT},
+            {"role": "user", "content": "지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 3개를 제안해줘."},
+        ],
+    )
+    raw = (response.choices[0].message.content or "").strip()
+    return _parse_candidates(raw)
 
 
-def run_research_agent() -> ResearchOutput:
+def run_research_agent(topic: str) -> ResearchOutput:
+    """선택된 주제로 전체 리서치 수행."""
     client = openai.OpenAI()
     response = client.chat.completions.create(
         model=RESEARCH_MODEL,
         max_tokens=RESEARCH_MAX_TOKENS,
         messages=[
             {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
-            {"role": "user", "content": _USER_PROMPT},
+            {"role": "user", "content": f"선정된 주제: {topic}\n\n이 주제로 리서치를 진행해줘."},
         ],
     )
     raw = response.choices[0].message.content or ""
     return _parse(raw.strip())
+
+
+def _parse_candidates(raw: str) -> list[dict]:
+    candidates = []
+    current: dict = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith("=== CANDIDATE_") and line.endswith(" ==="):
+            if current:
+                candidates.append(current)
+            current = {}
+        elif line.startswith("주제:"):
+            current["topic"] = line.split(":", 1)[1].strip()
+        elif line.startswith("각도:"):
+            current["angle"] = line.split(":", 1)[1].strip()
+        elif line.startswith("이유:"):
+            current["reason"] = line.split(":", 1)[1].strip()
+    if current:
+        candidates.append(current)
+    return candidates
 
 
 def _parse(raw: str) -> ResearchOutput:
@@ -55,7 +96,6 @@ def _parse(raw: str) -> ResearchOutput:
         line = line.strip()
         if not line or not line[0].isdigit():
             continue
-        # "1. name | feature | price | url"
         body = line.split(".", 1)[1].strip() if "." in line else line
         parts = [p.strip() for p in body.split("|")]
         if len(parts) >= 4:

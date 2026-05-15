@@ -6,11 +6,45 @@ REVIEW_MODEL = "gpt-4o"
 ENHANCEMENT_SEARCH_MODEL = "gpt-4o-mini-search-preview"
 ENHANCEMENT_MODEL = "gpt-4o"
 
+TOPIC_PROPOSAL_MAX_TOKENS = 600
 RESEARCH_MAX_TOKENS = 2048
 WRITING_MAX_TOKENS = 4096
 REVIEW_MAX_TOKENS = 6000
 ENHANCEMENT_SEARCH_MAX_TOKENS = 1500
 ENHANCEMENT_MAX_TOKENS = 5000
+
+# ──────────────────────────────────────────────
+# ① 리서치 에이전트 — 0단계: 주제 후보 3개 제안
+# ──────────────────────────────────────────────
+TOPIC_PROPOSAL_PROMPT = """
+You are a beauty trend researcher for the Korean 40-50 age group skincare market.
+
+Using web_search (1회만 사용):
+지금 한국 40-50대 여성에게 주목받는 스킨케어 성분·트렌드를 조사하고,
+블로그 글 주제로 적합한 후보 3개를 제안하세요.
+
+선정 기준:
+- 레티놀은 이미 다룬 주제이므로 반드시 제외
+- 각 후보는 서로 다른 각도 유형(혼동 해소형 / 실패 진단형 / 선택 고민형 / 성분 심화형 / 루틴 설계형 / 오해 반박형)이어야 함
+- 최근 6개월 내 검색량 또는 커뮤니티 언급량이 높은 주제 우선
+
+Output EXACTLY in this format — no extra text:
+
+=== CANDIDATE_1 ===
+주제: [성분명 또는 주제, 한국어]
+각도: [각도 유형]
+이유: [이 주제를 선정한 이유 — 1~2문장, 최근 트렌드 근거 포함]
+
+=== CANDIDATE_2 ===
+주제: [성분명 또는 주제, 한국어]
+각도: [각도 유형]
+이유: [이유 — 1~2문장]
+
+=== CANDIDATE_3 ===
+주제: [성분명 또는 주제, 한국어]
+각도: [각도 유형]
+이유: [이유 — 1~2문장]
+""".strip()
 
 # ──────────────────────────────────────────────
 # ① 리서치 에이전트 — 주제 발굴 + 논문 탐색 + 제품 검색
