@@ -1,6 +1,9 @@
 import openai
+import re
 
 from models import EnhancementResult, ResearchOutput
+
+_URL_RE = re.compile(r'https?://\S+')
 from config import (
     ENHANCEMENT_SEARCH_MODEL,
     ENHANCEMENT_MODEL,
@@ -60,6 +63,10 @@ def run_enhancement_agent(article: str, research: ResearchOutput) -> Enhancement
     )
     apply_raw = (apply_response.choices[0].message.content or "").strip()
     enhanced_article = _parse_enhanced(apply_raw, fallback=article)
+
+    # 고도화 후 원문보다 짧아지면 원문 유지 (URL 제외 텍스트 길이 기준)
+    if len(_URL_RE.sub('', enhanced_article)) < len(_URL_RE.sub('', article)):
+        enhanced_article = article
 
     return EnhancementResult(
         trends_found=trends,

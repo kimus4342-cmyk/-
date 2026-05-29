@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # main.py — BLOOMI 멀티 에이전트 실행 진입점
 
+import argparse
 import os
 import re
 from datetime import datetime
@@ -29,6 +30,10 @@ def save_output(content: str, topic: str) -> str:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--topic", type=str, default=None, help="주제를 직접 지정 (주제 선택 단계 건너뜀)")
+    args = parser.parse_args()
+
     if not os.getenv("OPENAI_API_KEY"):
         console.print("[bold red]오류:[/bold red] OPENAI_API_KEY가 설정되지 않았습니다.")
         console.print("  → .env 파일에 OPENAI_API_KEY를 입력하세요.")
@@ -42,7 +47,7 @@ def main():
     ))
 
     console.print()
-    article, research = run_pipeline()
+    article, research = run_pipeline(preset_topic=args.topic)
 
     console.print()
     console.print(Panel(

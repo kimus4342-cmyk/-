@@ -14,34 +14,44 @@ from enhancement_agent import run_enhancement_agent
 console = Console(legacy_windows=False, force_terminal=True)
 
 
-def run_pipeline() -> tuple[str, ResearchOutput]:
-    # ① 주제 후보 제안
-    with _spin("트렌드 탐색 중 — 주제 후보 조사 중..."):
-        candidates = run_topic_proposal()
-
-    if not candidates:
-        console.print("[red]주제 후보 조회 실패. 기본 주제로 진행합니다.[/red]")
-        selected_topic = "피부 장벽 강화"
+def run_pipeline(preset_topic: str | None = None) -> tuple[str, ResearchOutput]:
+    if preset_topic:
+        selected_topic = preset_topic
+        console.print(Panel(
+            f"[bold]지정 주제:[/bold] {preset_topic}",
+            title="[bold cyan]① 주제 확정 (직접 지정)[/bold cyan]",
+            border_style="cyan",
+        ))
     else:
-        table = Table(show_header=True, header_style="bold cyan", border_style="cyan", padding=(0, 1))
-        table.add_column("번호", width=4, justify="center")
-        table.add_column("주제", width=20)
-        table.add_column("각도", width=12)
-        table.add_column("선정 이유", width=50)
+        # ① 주제 후보 제안
+        with _spin("트렌드 탐색 중 — 주제 후보 조사 중..."):
+            candidates = run_topic_proposal()
 
-        for i, c in enumerate(candidates, 1):
-            table.add_row(
-                str(i),
-                c.get("topic", "—"),
-                c.get("angle", "—"),
-                c.get("reason", "—"),
-            )
+        if not candidates:
+            console.print("[red]주제 후보 조회 실패. 기본 주제로 진행합니다.[/red]")
+            selected_topic = "피부 장벽 강화"
+        else:
+            table = Table(show_header=True, header_style="bold cyan", border_style="cyan", padding=(0, 1))
+            table.add_column("번호", width=4, justify="center")
+            table.add_column("주제", width=18)
+            table.add_column("유형", width=10)
+            table.add_column("각도", width=10)
+            table.add_column("선정 이유", width=44)
 
-        console.print()
-        console.print(Panel(table, title="[bold cyan]① 주제 후보[/bold cyan]", border_style="cyan"))
-        console.print()
+            for i, c in enumerate(candidates, 1):
+                table.add_row(
+                    str(i),
+                    c.get("topic", "—"),
+                    c.get("type", "—"),
+                    c.get("angle", "—"),
+                    c.get("reason", "—"),
+                )
 
-        selected_topic = _ask_selection(candidates)
+            console.print()
+            console.print(Panel(table, title="[bold cyan]① 주제 후보[/bold cyan]", border_style="cyan"))
+            console.print()
+
+            selected_topic = _ask_selection(candidates)
 
     console.print(Panel(
         f"[bold]선택된 주제:[/bold] {selected_topic}",
@@ -53,13 +63,16 @@ def run_pipeline() -> tuple[str, ResearchOutput]:
     with _spin(f"'{selected_topic}' 논문·제품 리서치 중..."):
         research = run_research_agent(selected_topic)
 
+    product_summary = ', '.join(p.name for p in research.products) if research.products else "[red]제품 없음 — 작성 단계에서 기준만 제시됩니다[/red]"
     console.print(Panel(
         f"[bold]선정 주제:[/bold] {research.topic}\n"
         f"[bold]피부 고민:[/bold] {research.skin_concern}\n"
-        f"[bold]추천 제품:[/bold] {', '.join(p.name for p in research.products)}",
+        f"[bold]추천 제품:[/bold] {product_summary}",
         title="[bold cyan]② 리서치 에이전트 완료[/bold cyan]",
         border_style="cyan",
     ))
+    if not research.products:
+        console.print("[yellow]경고: 실제 제품을 찾지 못했습니다. 리서치를 다시 실행하거나 주제를 변경하는 것을 권장합니다.[/yellow]")
 
     # ③ 작성 에이전트
     with _spin("콘텐츠 초안 작성 중..."):

@@ -9,6 +9,7 @@ class Product(BaseModel):
 
 class ResearchOutput(BaseModel):
     topic: str
+    topic_type: str = ""  # 성분심화 / 카테고리비교 / 고민해결 / 뷰티디바이스
     skin_concern: str
     core_message: str
     key_insights: str
