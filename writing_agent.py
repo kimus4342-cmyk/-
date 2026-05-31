@@ -6,6 +6,31 @@ from config import WRITING_MODEL, WRITING_MAX_TOKENS, WRITING_SYSTEM_PROMPT
 
 _URL_RE = re.compile(r'https?://\S+')
 
+# KEY_INSIGHTS 안의 PubMed URL 추출
+_PUBMED_URL_RE = re.compile(r'https?://(?:doi\.org|pubmed\.ncbi\.nlm\.nih\.gov)/\S+')
+
+# 저널명이 포함된 인용 패턴 ("Journal of XYZ에 따르면" 류)
+_JOURNAL_CITATION_RE = re.compile(
+    r'[A-Z][A-Za-z\s&,]{3,}'
+    r'(?:Journal|Dermatology|Cosmetic|Clinical|Investigative|British|American|'
+    r'European|International|Science|Research|Medicine|Biology|Pharmacy)'
+    r'[A-Za-z\s]*'
+    r'(?:에서\s*발표한|에\s*수록된|에\s*실린|에\s*따르면|의\s*연구)'
+)
+
+# 출처불명 인용 패턴 — 저널명 없이 "연구에 따르면" 류 표현
+_VAGUE_CITATION_RE = re.compile(
+    r'(?:'
+    r'\d{4}년\s*연구에\s*따르면'      # "2023년 연구에 따르면"
+    r'|한\s*연구에[서를]'              # "한 연구에서"
+    r'|한\s*연구에\s*따르면'           # "한 연구에 따르면"
+    r'|일부\s*연구에'                  # "일부 연구에"
+    r'|최근\s*연구.*?에\s*따르면'      # "최근 연구에 따르면"
+    r'|연구\s*결과에\s*따르면'         # "연구 결과에 따르면"
+    r'|많은\s*연구들[은이]'            # "많은 연구들은"
+    r')'
+)
+
 
 def run_writing_agent(research: ResearchOutput) -> str:
     client = openai.OpenAI()
@@ -104,4 +129,134 @@ web_search 사용 금지.
         if expanded_text_len > draft_text_len:
             draft = expanded
 
+    # 출처불명 인용 패턴 감지 시 교정 1회
+    if _VAGUE_CITATION_RE.search(draft):
+        draft = _fix_vague_citations(client, draft)
+
+    # 허구 저널 인용 감지 시 교정 1회
+    valid_urls = _PUBMED_URL_RE.findall(research.key_insights)
+    if _has_fabricated_journal_citation(draft, set(valid_urls)):
+        draft = _fix_fabricated_citations(client, draft)
+
+    # 제품이 있는데 글에 누락된 제품 감지 시 교정 1회
+    if research.products:
+        missing = [p for p in research.products if p.name not in draft]
+        if missing:
+            draft = _fix_missing_products(client, draft, missing)
+
     return draft
+
+
+def _fix_vague_citations(client: openai.OpenAI, draft: str) -> str:
+    fix_prompt = f"""다음 블로그 글에서 출처불명 인용 표현을 찾아 수정하세요.
+
+수정 대상 — 아래 형태가 있으면 반드시 수정:
+- "2023년 연구에 따르면" (저널명 없이 연도만)
+- "한 연구에서", "한 연구에 따르면"
+- "일부 연구에 따르면", "최근 연구에 따르면"
+- "연구 결과에 따르면", "많은 연구들은"
+
+수정 방법:
+- 저널명·URL 없는 인용은 "~로 알려져 있습니다", "~가 확인됩니다", "~로 이해됩니다" 등 서술형으로 바꾸세요.
+- 인용에 수치가 포함된 경우 수치도 함께 제거하세요.
+- 저널명이 명시된 인용 ("Journal of XYZ에 따르면" 등)은 수정하지 마세요.
+- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요.
+
+===글===
+{draft}
+===끝===
+
+수정된 전체 글을 출력하세요."""
+
+    response = client.chat.completions.create(
+        model=WRITING_MODEL,
+        max_tokens=WRITING_MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": WRITING_SYSTEM_PROMPT},
+            {"role": "user", "content": fix_prompt},
+        ],
+    )
+    fixed = (response.choices[0].message.content or "").strip()
+    # 교정 후 글이 너무 짧아지면 원문 유지
+    fixed_text_len = len(_URL_RE.sub('', fixed))
+    original_text_len = len(_URL_RE.sub('', draft))
+    return fixed if fixed_text_len >= original_text_len * 0.9 else draft
+
+
+def _has_fabricated_journal_citation(draft: str, valid_urls: set) -> bool:
+    """저널명 인용이 있는데 KEY_INSIGHTS의 실제 PubMed URL이 글에 없으면 허구 인용으로 판단."""
+    if not _JOURNAL_CITATION_RE.search(draft):
+        return False
+    draft_urls = set(_PUBMED_URL_RE.findall(draft))
+    return len(draft_urls & valid_urls) == 0
+
+
+def _fix_fabricated_citations(client: openai.OpenAI, draft: str) -> str:
+    fix_prompt = f"""다음 블로그 글에서 출처 URL이 없는 저널명 인용을 찾아 수정하세요.
+
+수정 대상:
+- "Journal of XYZ에서 발표한 연구에 따르면..." 형태의 인용 중 URL이 없는 것
+- "British Journal of Dermatology에 수록된 연구..." 형태의 인용 중 URL이 없는 것
+
+수정 방법:
+- URL 없는 저널명 인용은 "~로 알려져 있습니다", "~가 확인됩니다" 등 서술형으로 바꾸세요.
+- 수치가 포함된 경우 수치도 제거하세요.
+- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요.
+
+===글===
+{draft}
+===끝===
+
+수정된 전체 글을 출력하세요."""
+
+    response = client.chat.completions.create(
+        model=WRITING_MODEL,
+        max_tokens=WRITING_MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": WRITING_SYSTEM_PROMPT},
+            {"role": "user", "content": fix_prompt},
+        ],
+    )
+    fixed = (response.choices[0].message.content or "").strip()
+    fixed_text_len = len(_URL_RE.sub('', fixed))
+    original_text_len = len(_URL_RE.sub('', draft))
+    return fixed if fixed_text_len >= original_text_len * 0.9 else draft
+
+
+def _fix_missing_products(client: openai.OpenAI, draft: str, missing) -> str:
+    product_lines = "\n".join(
+        f"- {p.name}: {p.feature} / {p.price}"
+        + (f" / {p.url}" if p.url else "")
+        + (f"\n  주요 성분: {p.ingredients}" if p.ingredients else "")
+        for p in missing
+    )
+    fix_prompt = f"""다음 블로그 글의 "어떻게 고르고 시작할까" 섹션에 아래 제품들이 빠져 있습니다. 해당 섹션에 추가해주세요.
+
+누락된 제품:
+{product_lines}
+
+각 제품마다 3문장으로 소개합니다:
+① 핵심 성분 조합이 주제 성분에 어떻게 작용하는지
+② 다른 제품과 구별되는 차별점
+③ 어떤 피부 타입·고민에 맞는지
+
+글의 다른 부분(소제목·구조)은 수정하지 마세요.
+
+===글===
+{draft}
+===끝===
+
+수정된 전체 글을 출력하세요."""
+
+    response = client.chat.completions.create(
+        model=WRITING_MODEL,
+        max_tokens=WRITING_MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": WRITING_SYSTEM_PROMPT},
+            {"role": "user", "content": fix_prompt},
+        ],
+    )
+    fixed = (response.choices[0].message.content or "").strip()
+    fixed_text_len = len(_URL_RE.sub('', fixed))
+    original_text_len = len(_URL_RE.sub('', draft))
+    return fixed if fixed_text_len >= original_text_len * 0.9 else draft

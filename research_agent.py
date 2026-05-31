@@ -9,6 +9,8 @@ from config import (
     RESEARCH_SYSTEM_PROMPT,
     TOPIC_PROPOSAL_PROMPT,
     TOPIC_PROPOSAL_MAX_TOKENS,
+    TOPIC_REFINEMENT_PROMPT,
+    TOPIC_REFINEMENT_MAX_TOKENS,
 )
 
 # PubMed는 영어 검색이므로 주요 성분명 매핑
@@ -81,6 +83,27 @@ def run_topic_proposal() -> list[dict]:
     )
     raw = (response.choices[0].message.content or "").strip()
     return _parse_candidates(raw)
+
+
+def run_topic_refinement(topic: str) -> str:
+    """주제를 경쟁 콘텐츠 분석 기반으로 심화·각도화한다. 실패 시 원래 주제 반환."""
+    client = openai.OpenAI()
+    try:
+        response = client.chat.completions.create(
+            model=RESEARCH_MODEL,
+            max_tokens=TOPIC_REFINEMENT_MAX_TOKENS,
+            messages=[
+                {"role": "system", "content": TOPIC_REFINEMENT_PROMPT},
+                {"role": "user", "content": f"주제: {topic}"},
+            ],
+        )
+        refined = (response.choices[0].message.content or "").strip()
+        # 너무 짧거나 원래 주제보다 짧으면 원래 주제 반환
+        if len(refined) < len(topic) or len(refined) > 80:
+            return topic
+        return refined
+    except Exception:
+        return topic
 
 
 def run_research_agent(topic: str) -> ResearchOutput:

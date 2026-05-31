@@ -6,7 +6,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from models import ResearchOutput
-from research_agent import run_topic_proposal, run_research_agent
+from research_agent import run_topic_proposal, run_topic_refinement, run_research_agent
 from writing_agent import run_writing_agent
 from review_agent import run_review_agent
 from enhancement_agent import run_enhancement_agent
@@ -59,9 +59,21 @@ def run_pipeline(preset_topic: str | None = None) -> tuple[str, ResearchOutput]:
         border_style="cyan",
     ))
 
+    # ①.5 주제 각도화
+    with _spin(f"'{selected_topic}' 경쟁 콘텐츠 분석 및 주제 심화 중..."):
+        refined_topic = run_topic_refinement(selected_topic)
+
+    if refined_topic != selected_topic:
+        console.print(Panel(
+            f"[dim]원래 주제:[/dim] {selected_topic}\n"
+            f"[bold]심화 주제:[/bold] {refined_topic}",
+            title="[bold cyan]① 주제 각도화[/bold cyan]",
+            border_style="cyan",
+        ))
+
     # ② 리서치 에이전트
-    with _spin(f"'{selected_topic}' 논문·제품 리서치 중..."):
-        research = run_research_agent(selected_topic)
+    with _spin(f"'{refined_topic}' 논문·제품 리서치 중..."):
+        research = run_research_agent(refined_topic)
 
     product_summary = ', '.join(p.name for p in research.products) if research.products else "[red]제품 없음 — 작성 단계에서 기준만 제시됩니다[/red]"
     console.print(Panel(
