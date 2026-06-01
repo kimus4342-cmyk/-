@@ -1,4 +1,5 @@
 import openai
+import random
 from rich.console import Console
 
 from models import ResearchOutput, Product
@@ -70,15 +71,31 @@ def _sanitize_url(url: str) -> str:
     return url
 
 
+_TOPIC_CATEGORIES = [
+    "미백·기미·칙칙함",
+    "주름·탄력·리프팅",
+    "보습·수분·피부 장벽",
+    "각질·모공·피부결",
+    "민감성·홍조·진정",
+    "재생·회복·안티에이징",
+    "선케어·자외선 차단",
+    "눈가·넥·국소 부위 관리",
+    "뷰티 디바이스·기기",
+    "성분 비교·선택 기준",
+]
+
+
 def run_topic_proposal() -> list[dict]:
-    """주제 후보 3개를 제안하고 반환."""
+    """주제 후보 3개를 제안하고 반환. 실행마다 랜덤 카테고리로 다양성 확보."""
     client = openai.OpenAI()
+    category = random.choice(_TOPIC_CATEGORIES)
+    console.print(f"[dim]이번 주제 탐색 카테고리: {category}[/dim]")
     response = client.chat.completions.create(
         model=RESEARCH_MODEL,
         max_tokens=TOPIC_PROPOSAL_MAX_TOKENS,
         messages=[
             {"role": "system", "content": TOPIC_PROPOSAL_PROMPT},
-            {"role": "user", "content": "지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 3개를 제안해줘."},
+            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 3개를 제안해줘. 이번엔 [{category}] 관련 주제에 집중해줘."},
         ],
     )
     raw = (response.choices[0].message.content or "").strip()
