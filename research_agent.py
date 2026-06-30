@@ -1,5 +1,6 @@
 import openai
 import random
+import re
 from rich.console import Console
 
 from models import ResearchOutput, Product
@@ -86,7 +87,7 @@ _TOPIC_CATEGORIES = [
 
 
 def run_topic_proposal() -> list[dict]:
-    """주제 후보 3개를 제안하고 반환. 실행마다 랜덤 카테고리로 다양성 확보."""
+    """주제 후보 5개를 제안하고 반환. 실행마다 랜덤 카테고리로 다양성 확보."""
     client = openai.OpenAI()
     category = random.choice(_TOPIC_CATEGORIES)
     console.print(f"[dim]이번 주제 탐색 카테고리: {category}[/dim]")
@@ -95,7 +96,7 @@ def run_topic_proposal() -> list[dict]:
         max_tokens=TOPIC_PROPOSAL_MAX_TOKENS,
         messages=[
             {"role": "system", "content": TOPIC_PROPOSAL_PROMPT},
-            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 3개를 제안해줘. 이번엔 [{category}] 관련 주제에 집중해줘."},
+            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 5개를 제안해줘. 5개 중 1~2개는 [{category}] 관련 주제를 포함하고, 나머지는 다른 유형에서 다양하게 선택해줘."},
         ],
     )
     raw = (response.choices[0].message.content or "").strip()
@@ -149,6 +150,10 @@ def run_research_agent(topic: str) -> ResearchOutput:
     return _parse(raw.strip(), fallback_topic=topic)
 
 
+_URL_RE = re.compile(r'\(?https?://\S+\)?')
+_EXCLUDED_INGREDIENTS = {"레티놀", "히알루론산", "콜라겐", "세라마이드"}
+
+
 def _parse_candidates(raw: str) -> list[dict]:
     candidates = []
     current: dict = {}
@@ -165,10 +170,32 @@ def _parse_candidates(raw: str) -> list[dict]:
         elif line.startswith("각도:"):
             current["angle"] = line.split(":", 1)[1].strip()
         elif line.startswith("이유:"):
-            current["reason"] = line.split(":", 1)[1].strip()
+            reason = line.split(":", 1)[1].strip()
+            reason = _URL_RE.sub("", reason)
+            reason = re.sub(r'[\s\(]+$', '', reason).strip()
+            current["reason"] = reason
     if current:
         candidates.append(current)
-    return candidates
+
+    # 중복 주제 제거 (주제명 동일하거나 제외 성분 포함된 후보 필터)
+    seen_topics: set[str] = set()
+    seen_keywords: list[set[str]] = []  # 이미 등록된 후보의 키워드 집합 목록
+    filtered = []
+    for c in candidates:
+        topic = c.get("topic", "")
+        if topic in seen_topics:
+            continue
+        if any(ing in topic for ing in _EXCLUDED_INGREDIENTS):
+            continue
+        # 키워드 기반 유사 중복 체크: 2글자 이상 한국어/영문 단어 추출
+        words = set(re.findall(r'[가-힣A-Za-z]{2,}', topic))
+        # 이미 등록된 후보와 겹치는 키워드가 2개 이상이면 중복으로 간주
+        if any(len(words & prev) >= 3 for prev in seen_keywords):
+            continue
+        seen_topics.add(topic)
+        seen_keywords.append(words)
+        filtered.append(c)
+    return filtered
 
 
 def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:
@@ -188,8 +215,19 @@ def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:
     key_insights = "\n".join(sections.get("KEY_INSIGHTS", [])).strip()
     editorial_angle = "\n".join(sections.get("EDITORIAL_ANGLE", [])).strip()
 
+    # 제품 섹션 raw 출력 로그
+    raw_products_lines = sections.get("PRODUCTS", [])
+    if raw_products_lines:
+        console.print("[dim]─── PRODUCTS raw 출력 ───[/dim]")
+        for l in raw_products_lines:
+            if l.strip():
+                console.print(f"[dim]{l}[/dim]")
+        console.print("[dim]─────────────────────────[/dim]")
+    else:
+        console.print("[yellow]PRODUCTS 섹션 자체가 없음 — 모델이 섹션을 출력하지 않았습니다[/yellow]")
+
     products: list[Product] = []
-    for line in sections.get("PRODUCTS", []):
+    for line in raw_products_lines:
         line = line.strip()
         if not line or not line[0].isdigit():
             continue
@@ -203,10 +241,15 @@ def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:
                 url=_sanitize_url(parts[3]),
                 ingredients=parts[4] if len(parts) >= 5 else "",
             ))
+        else:
+            console.print(f"[yellow]제품 파싱 실패 (구분자 부족, {len(parts)}개): {line[:80]}[/yellow]")
 
     valid_products = [p for p in products if not _is_placeholder(p.name)]
     if len(valid_products) < len(products):
         console.print(f"[yellow]경고: 플레이스홀더 제품명 {len(products) - len(valid_products)}개 감지 — 제외됨[/yellow]")
+        for p in products:
+            if _is_placeholder(p.name):
+                console.print(f"[yellow]  필터됨: {p.name}[/yellow]")
     products = valid_products
 
     if not topic:

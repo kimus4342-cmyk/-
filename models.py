@@ -16,6 +16,12 @@ class ResearchOutput(BaseModel):
     editorial_angle: str = ""  # 각도 유형 + 선택 이유 + 오프닝 훅
     products: list[Product]
 
+class ReviewInsights(BaseModel):
+    positive_patterns: str = ""
+    negative_patterns: str = ""
+    common_mistakes: str = ""
+    sources: str = ""  # 검색에서 확인한 URL (없으면 빈 문자열)
+
 class ReviewResult(BaseModel):
     score: int
     feedback: str

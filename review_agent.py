@@ -1,11 +1,11 @@
-import openai
+from openai import OpenAI
 
 from models import ReviewResult, ResearchOutput
 from config import REVIEW_MODEL, REVIEW_MAX_TOKENS, REVIEW_SYSTEM_PROMPT
 
 
 def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
-    client = openai.OpenAI()
+    client = OpenAI()
 
     user_prompt = f"""
 주제 "{research.topic}", 독자 40-50대 한국 여성을 위한 다음 초안을 검수해줘.
@@ -46,8 +46,11 @@ def _parse(raw: str, fallback: str) -> ReviewResult:
     feedback = "\n".join(sections.get("FEEDBACK", [])).strip()
     final_article = "\n".join(sections.get("FINAL_ARTICLE", [])).strip()
 
+    if len(final_article) < 500:
+        final_article = fallback
+
     return ReviewResult(
         score=score,
         feedback=feedback,
-        final_article=final_article or fallback,
+        final_article=final_article,
     )

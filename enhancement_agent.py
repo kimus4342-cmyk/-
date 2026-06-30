@@ -2,6 +2,7 @@ import openai
 import re
 
 from models import EnhancementResult, ResearchOutput
+from writing_agent import _VAGUE_CITATION_RE, _fix_vague_citations, _INGESTION_RE, _fix_ingestion_content
 
 _URL_RE = re.compile(r'https?://\S+')
 from config import (
@@ -67,6 +68,13 @@ def run_enhancement_agent(article: str, research: ResearchOutput) -> Enhancement
     # 고도화 후 원문보다 짧아지면 원문 유지 (URL 제외 텍스트 길이 기준)
     if len(_URL_RE.sub('', enhanced_article)) < len(_URL_RE.sub('', article)):
         enhanced_article = article
+
+    # 고도화 에이전트가 새로 삽입한 출처불명 인용·섭취 표현 후처리
+    enhanced_stripped = re.sub(r'\*{1,2}', '', enhanced_article)
+    if _VAGUE_CITATION_RE.search(enhanced_stripped):
+        enhanced_article = _fix_vague_citations(enhanced_article)
+    if _INGESTION_RE.search(enhanced_article):
+        enhanced_article = _fix_ingestion_content(enhanced_article)
 
     return EnhancementResult(
         trends_found=trends,
