@@ -8,6 +8,7 @@ upload_to_tistory.py — 기존 .md 파일을 티스토리에 업로드 (Playwri
 """
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -104,9 +105,32 @@ def upload(md_path: str, public: bool = False) -> None:
         page.wait_for_load_state("networkidle")
         console.print("[green]  ✓ 로그인 완료[/green]")
 
-        # ── 2. 글쓰기 페이지 이동 ──────────────────────────
-        console.print("③ 글쓰기 페이지 이동 중...")
-        page.goto(f"https://{blog_name}.tistory.com/manage/post/write")
+        # ── 2. 관리 페이지 → 새 글 쓰기 버튼 클릭 ─────────
+        console.print("③ 관리 페이지 이동 중...")
+        page.goto(f"https://{blog_name}.tistory.com/manage")
+        page.wait_for_load_state("networkidle")
+        page.wait_for_timeout(2000)
+
+        console.print("④ 새 글 쓰기 버튼 클릭 중...")
+        write_btn_clicked = False
+        for selector in [
+            "a[href*='post/write']",
+            "a:has-text('새 글')",
+            "a:has-text('글쓰기')",
+            "button:has-text('새 글')",
+            ".btn-write",
+        ]:
+            try:
+                page.click(selector, timeout=3000)
+                write_btn_clicked = True
+                break
+            except PWTimeout:
+                continue
+
+        if not write_btn_clicked:
+            console.print("[yellow]  새 글 쓰기 버튼을 못 찾았습니다. 직접 클릭해주세요.[/yellow]")
+            input("  글쓰기 페이지 열린 후 Enter를 누르세요: ")
+
         page.wait_for_load_state("networkidle")
         page.wait_for_timeout(2000)
 
@@ -119,49 +143,40 @@ def upload(md_path: str, public: bool = False) -> None:
             except PWTimeout:
                 continue
 
-        # ── 4. HTML 편집 모드 전환 ───────────────────────────
-        console.print("⑤ HTML 편집 모드 전환 중...")
+        # ── 4. TinyMCE 완전 초기화 대기 후 주입 ─────────────
+        console.print("⑤ 내용 주입 중...")
+        try:
+            page.wait_for_function(
+                "() => { const ed = tinymce.get('editor-tistory'); return ed && ed.initialized; }",
+                timeout=15_000,
+            )
+        except PWTimeout:
+            page.wait_for_timeout(3000)
+
+        # setContent + 이벤트 트리거
+        page.evaluate(f"""() => {{
+            const h = {json.dumps(html)};
+            const ed = tinymce.get('editor-tistory');
+            if (ed) {{
+                ed.setContent(h);
+                ed.undoManager.clear();
+                ed.undoManager.add();
+                ed.fire('change');
+                ed.fire('input');
+            }}
+        }}""")
         page.wait_for_timeout(1000)
 
-        html_btn_clicked = False
-        for selector in [
-            "button[data-tiara-action-name='HTML']",
-            "button.html-editor-btn",
-            "button.toolbar-btn[title='HTML']",
-            "button:has-text('HTML')",
-            "[class*='html'][class*='btn']",
-        ]:
-            try:
-                page.click(selector, timeout=3000)
-                html_btn_clicked = True
-                break
-            except PWTimeout:
-                continue
+        # 주입 결과 확인
+        content_len = page.evaluate("""() => {
+            const ed = tinymce.get('editor-tistory');
+            return ed ? ed.getContent().length : 0;
+        }""")
+        console.print(f"[dim]  주입 후 내용 길이: {content_len}자[/dim]")
 
-        if not html_btn_clicked:
-            console.print("[yellow]  HTML 버튼을 자동으로 찾지 못했습니다. 브라우저에서 직접 HTML 모드로 전환해주세요.[/yellow]")
-            input("  HTML 모드로 전환 후 Enter를 누르세요...")
-
-        page.wait_for_timeout(1000)
-
-        # ── 5. HTML 내용 입력 ────────────────────────────────
-        console.print("⑥ 내용 입력 중...")
-
-        # CodeMirror 에디터 처리
-        cm = page.locator(".CodeMirror")
-        if cm.count() > 0:
-            cm.click()
-            page.keyboard.press("Control+a")
-            page.wait_for_timeout(200)
-            page.keyboard.type(html)
-        else:
-            # textarea fallback
-            for selector in ["textarea.html-editor", "textarea[name='content']", "#content"]:
-                try:
-                    page.fill(selector, html, timeout=3000)
-                    break
-                except PWTimeout:
-                    continue
+        if content_len < 100:
+            console.print("[yellow]  내용이 비어 있습니다. 브라우저에서 직접 확인 후 Enter를 눌러주세요.[/yellow]")
+            input("  Enter 키: ")
 
         page.wait_for_timeout(500)
 

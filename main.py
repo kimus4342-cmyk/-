@@ -14,6 +14,7 @@ from rich.panel import Panel
 from pipeline import run_pipeline
 from research_agent import run_topic_proposal
 from tistory_agent import setup_tistory_auth
+from upload_to_tistory import upload as tistory_upload
 
 load_dotenv()
 console = Console(legacy_windows=False, force_terminal=True)
@@ -81,7 +82,7 @@ def main():
     console.print()
     article, research = run_pipeline(
         preset_topic=args.topic,
-        auto_post=args.post,
+        auto_post=False,
         post_visibility=post_visibility,
     )
 
@@ -95,6 +96,10 @@ def main():
 
     filename = save_output(article, research.topic)
     console.print(f"[green]저장 완료:[/green] {filename}")
+
+    if args.post:
+        console.print()
+        tistory_upload(filename, public=args.public)
 
 
 if __name__ == "__main__":

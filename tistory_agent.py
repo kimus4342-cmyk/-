@@ -24,31 +24,32 @@ _STYLE = """\
   font-size:16px;line-height:1.9;color:#2d2d2d;word-break:keep-all;-webkit-font-smoothing:antialiased}
 .bloomi h1{font-size:22px;font-weight:700;color:#1a1a1a;margin:28px 0 14px;line-height:1.4}
 .bloomi h2{font-size:19px;font-weight:700;color:#1a1a1a;margin:36px 0 14px;
-  padding:11px 16px;background:#fff2f0;border-left:5px solid #d96b6b;border-radius:0 8px 8px 0}
+  padding:11px 16px;background:#f0f5e4;border-left:5px solid #6b8c3a;border-radius:0 8px 8px 0}
 .bloomi h3{font-size:17px;font-weight:600;color:#222;margin:28px 0 12px;
-  padding-bottom:7px;border-bottom:2px solid #f5d5d5}
+  padding-bottom:7px;border-bottom:2px solid #c8e0a0}
 .bloomi h4{font-size:16px;font-weight:600;color:#333;margin:22px 0 10px;
-  padding-left:11px;border-left:3px solid #d96b6b}
+  padding-left:11px;border-left:3px solid #6b8c3a}
 .bloomi p{margin:13px 0}
-.bloomi ul{list-style:none;padding:0;margin:12px 0}
-.bloomi li{position:relative;padding-left:18px;margin:7px 0}
-.bloomi li::before{content:"·";color:#d96b6b;position:absolute;left:5px;
+.bloomi ul{list-style:none !important;padding:0;margin:12px 0}
+.bloomi li{list-style:none !important;position:relative;padding-left:18px;margin:7px 0}
+.bloomi li::before{content:"·";color:#6b8c3a;position:absolute;left:4px;
   font-size:22px;line-height:1.25;font-weight:700}
-.bloomi strong{color:#b84444;font-weight:600}
-.bloomi em{font-style:normal;background:#fff5e0;padding:1px 4px;border-radius:3px}
-.bloomi blockquote{background:#fff8f5;border-left:4px solid #e8a080;padding:13px 17px;
+.bloomi strong{color:#4a6a22;font-weight:600}
+.bloomi em{font-style:normal;background:#f0f5e4;padding:1px 4px;border-radius:3px}
+.bloomi blockquote{background:#f5f9ee;border-left:4px solid #8fad5a;padding:13px 17px;
   margin:16px 0;border-radius:0 8px 8px 0;color:#555;font-size:15px}
-.bloomi hr{border:none;border-top:1px solid #f0e0e0;margin:28px 0}
+.bloomi hr{border:none;border-top:1px solid #d8ead0;margin:28px 0}
 .bloomi table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14px}
-.bloomi th{background:#f9e8e8;padding:10px 13px;text-align:left;
-  border:1px solid #e8d0d0;font-weight:600;color:#333}
-.bloomi td{padding:9px 13px;border:1px solid #edd8d8;vertical-align:top}
-.bloomi tr:nth-child(even) td{background:#fdf5f5}
+.bloomi th{background:#e8f0d5;padding:10px 13px;text-align:left;
+  border:1px solid #d0e0b8;font-weight:600;color:#333}
+.bloomi td{padding:9px 13px;border:1px solid #d8ead0;vertical-align:top}
+.bloomi tr:nth-child(even) td{background:#f5f9ee}
 /* 핵심 요약 박스 — 글 첫 번째 ul에 자동 적용 */
-.bloomi-summary{background:linear-gradient(135deg,#fff8f8,#fff0ee);
-  border:1px solid #f0c8c8;border-radius:12px;padding:18px 22px;margin:18px 0 28px}
-.bloomi-summary li{padding-left:24px;margin:6px 0}
-.bloomi-summary li::before{content:"✓";font-size:15px;left:0;line-height:1.75;font-weight:700}
+.bloomi-summary{background:linear-gradient(135deg,#f5f9ee,#edf5e0);
+  border:1px solid #c8e0a0;border-radius:12px;padding:18px 22px;margin:18px 0 28px}
+.bloomi-summary li{list-style:none !important;padding-left:24px;margin:6px 0}
+.bloomi-summary li::before{content:"✓";color:#6b8c3a;font-size:15px;
+  position:absolute;left:0;line-height:1.75;font-weight:700}
 @media(max-width:640px){
   .bloomi{font-size:15px}
   .bloomi h1{font-size:20px}
@@ -211,6 +212,9 @@ def _build_html(article: str) -> str:
     for line in lines:
         if not first_h1_removed and re.match(r"^#\s+", line):
             first_h1_removed = True
+            continue
+        # 검색 키워드 줄 제거
+        if re.match(r"\*\*검색\s*키워드", line) or re.match(r"검색\s*키워드", line):
             continue
         cleaned_lines.append(line)
     md_text = "\n".join(cleaned_lines)
