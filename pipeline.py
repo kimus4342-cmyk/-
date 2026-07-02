@@ -12,11 +12,16 @@ from writing_agent import run_writing_agent, replace_products_in_article
 from product_search_agent import run_product_search_agent
 from review_agent import run_review_agent
 from enhancement_agent import run_enhancement_agent
+from tistory_agent import post_to_tistory
 
 console = Console(legacy_windows=False, force_terminal=True)
 
 
-def run_pipeline(preset_topic: str | None = None) -> tuple[str, ResearchOutput]:
+def run_pipeline(
+    preset_topic: str | None = None,
+    auto_post: bool = False,
+    post_visibility: str = "0",
+) -> tuple[str, ResearchOutput]:
     if preset_topic:
         selected_topic = preset_topic
         console.print(Panel(
@@ -158,6 +163,32 @@ def run_pipeline(preset_topic: str | None = None) -> tuple[str, ResearchOutput]:
         title="[bold green]⑤ 고도화 에이전트 완료[/bold green]",
         border_style="green",
     ))
+
+    # ⑥ 티스토리 자동 등록 (옵션)
+    if auto_post:
+        with _spin("티스토리에 등록 중..."):
+            post_url = post_to_tistory(
+                enhancement.enhanced_article,
+                seo_keywords=enhancement.seo_keywords,
+                visibility=post_visibility,
+            )
+
+        visibility_label = "[dim]비공개[/dim]" if post_visibility == "0" else "[green]공개[/green]"
+        if post_url:
+            console.print(Panel(
+                f"[bold]URL:[/bold] {post_url}\n"
+                f"[bold]공개 여부:[/bold] {visibility_label}",
+                title="[bold green]⑥ 티스토리 등록 완료[/bold green]",
+                border_style="green",
+            ))
+        else:
+            console.print(Panel(
+                "[red]등록에 실패했습니다.[/red]\n"
+                "[dim]--setup-tistory 로 인증을 먼저 완료하거나\n"
+                ".env의 TISTORY_* 값을 확인하세요.[/dim]",
+                title="[bold red]⑥ 티스토리 등록 실패[/bold red]",
+                border_style="red",
+            ))
 
     return enhancement.enhanced_article, research
 

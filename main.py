@@ -13,6 +13,7 @@ from rich.panel import Panel
 
 from pipeline import run_pipeline
 from research_agent import run_topic_proposal
+from tistory_agent import setup_tistory_auth
 
 load_dotenv()
 console = Console(legacy_windows=False, force_terminal=True)
@@ -31,19 +32,32 @@ def save_output(content: str, topic: str) -> str:
 
 
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="BLOOMI 4050 뷰티 큐레이션 멀티 에이전트")
     parser.add_argument("--topic", type=str, default=None, help="주제를 직접 지정 (주제 선택 단계 건너뜀)")
     parser.add_argument("--topics-only", action="store_true", help="주제 후보만 조회하고 종료")
+    parser.add_argument("--post", action="store_true", help="완성 글을 티스토리에 자동 등록")
+    parser.add_argument("--public", action="store_true", help="티스토리 등록 시 공개로 업로드 (기본: 비공개)")
+    parser.add_argument("--setup-tistory", action="store_true", help="티스토리 OAuth 인증 초기 설정")
     args = parser.parse_args()
+
+    # 티스토리 인증 설정 (단독 실행)
+    if args.setup_tistory:
+        setup_tistory_auth()
+        return
 
     if not os.getenv("OPENAI_API_KEY"):
         console.print("[bold red]오류:[/bold red] OPENAI_API_KEY가 설정되지 않았습니다.")
         console.print("  → .env 파일에 OPENAI_API_KEY를 입력하세요.")
         return
 
+    post_visibility = "3" if args.public else "0"
+    visibility_label = "[green]공개[/green]" if args.public else "[dim]비공개[/dim]"
+
     console.print(Panel(
         "[bold]BLOOMI[/bold] — 4050 뷰티 큐레이션 멀티 에이전트\n"
-        "[dim]주제 선택 → 리서치 → 작성 → 검수 → 고도화[/dim]",
+        "[dim]주제 선택 → 리서치 → 작성 → 검수 → 고도화"
+        + (" → 티스토리 등록[/dim]" if args.post else "[/dim]")
+        + (f"\n티스토리: {visibility_label}" if args.post else ""),
         border_style="dark_orange",
         padding=(1, 4),
     ))
@@ -65,7 +79,11 @@ def main():
         return
 
     console.print()
-    article, research = run_pipeline(preset_topic=args.topic)
+    article, research = run_pipeline(
+        preset_topic=args.topic,
+        auto_post=args.post,
+        post_visibility=post_visibility,
+    )
 
     console.print()
     console.print(Panel(

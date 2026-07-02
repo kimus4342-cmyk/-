@@ -7,8 +7,25 @@ from config import REVIEW_MODEL, REVIEW_MAX_TOKENS, REVIEW_SYSTEM_PROMPT
 def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
     client = OpenAI()
 
+    products_summary = "\n".join(
+        f"- {p.name}: {p.feature}" for p in research.products
+    ) if research.products else "없음"
+
     user_prompt = f"""
 주제 "{research.topic}", 독자 40-50대 한국 여성을 위한 다음 초안을 검수해줘.
+
+=== 리서치 원본 (사실관계 검증 기준) ===
+[SKIN_CONCERN]
+{research.skin_concern}
+
+[CORE_MESSAGE]
+{research.core_message}
+
+[KEY_INSIGHTS]
+{research.key_insights}
+
+[추천 제품]
+{products_summary}
 
 === 초안 ===
 {draft}
