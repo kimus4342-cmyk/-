@@ -1,7 +1,10 @@
 {
   "permissions": {
     "allow": [
-      "Read(//c/Users/qkrrk/OneDrive/���� ȭ��/**)"
+      "Read(//c/Users/qkrrk/OneDrive/���� ȭ��/**)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(rm -f \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI/topic_history.json\")"
     ]
   }
 }

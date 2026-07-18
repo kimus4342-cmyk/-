@@ -11,6 +11,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -22,6 +23,17 @@ from tistory_agent import _build_html, _extract_title
 
 load_dotenv()
 console = Console(legacy_windows=False, force_terminal=True)
+
+
+def _captcha_present(page) -> bool:
+    """DKAPTCHA 위젯은 iframe 안에 렌더링되므로 모든 frame을 뒤져서 확인한다."""
+    for frame in page.frames:
+        try:
+            if frame.get_by_text("DKAPTCHA").count() > 0:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 def upload(md_path: str, public: bool = False) -> None:
@@ -183,65 +195,96 @@ def upload(md_path: str, public: bool = False) -> None:
         # ── 6. 발행/저장 ────────────────────────────────────
         console.print("⑦ 저장/발행 중...")
 
-        # 발행 버튼 클릭
-        for selector in [
-            "#publish-layer-btn",
-            "button.btn-publish",
-            "button:has-text('발행')",
-            "button:has-text('저장')",
-        ]:
+        # "완료" 버튼 클릭 → 발행 설정 모달 열기 (모달 기본 공개범위는 비공개)
+        for selector in ["#publish-layer-btn", "button.btn-publish", "button:has-text('완료')"]:
             try:
                 page.click(selector, timeout=3000)
                 break
             except PWTimeout:
                 continue
 
-        page.wait_for_timeout(2000)
+        page.wait_for_timeout(1500)
 
-        # 비공개/공개 설정
-        if not public:
-            for selector in [
-                "label[for='visibility-private']",
-                "input[value='0'] + label",
-                "button:has-text('비공개')",
-            ]:
-                try:
-                    page.click(selector, timeout=2000)
+        # 공개로 발행할 경우에만 "공개" 라디오를 선택 (기본값이 비공개이므로 비공개는 그대로 둠)
+        if public:
+            try:
+                page.get_by_text("공개", exact=True).click(timeout=2000)
+            except PWTimeout:
+                pass
+            page.wait_for_timeout(500)
+
+        # 최종 저장 버튼 — 선택된 공개범위에 따라 "발행"/"비공개 저장"/"보호 저장" 등으로 텍스트가 바뀜
+        confirmed = False
+        for name in ["발행", "비공개 저장", "보호 저장", "공개 저장", "저장"]:
+            try:
+                page.get_by_role("button", name=name, exact=True).click(timeout=2000)
+                confirmed = True
+                break
+            except PWTimeout:
+                continue
+
+        page.wait_for_timeout(1000)
+
+        # 자동입력 방지(CAPTCHA)가 뜰 수 있음 — DKAPTCHA는 iframe 안에서 렌더링되므로
+        # 모든 frame을 대상으로 능동 폴링한다
+        captcha_shown = False
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if _captcha_present(page):
+                captcha_shown = True
+                break
+            page.wait_for_timeout(300)
+
+        if captcha_shown:
+            console.print(Panel(
+                "[yellow]자동입력 방지(CAPTCHA)가 떴습니다.[/yellow]\n"
+                "브라우저 창에서 직접 답을 입력하고 [bold]답변 제출[/bold]을 눌러주세요.\n"
+                "[dim]완료되면 자동으로 이어서 진행됩니다 (최대 5분 대기)[/dim]",
+                title="[bold yellow]⚠ 사람 확인 필요[/bold yellow]",
+                border_style="yellow",
+            ))
+            solved = False
+            deadline = time.time() + 300
+            while time.time() < deadline:
+                if not _captcha_present(page):
+                    solved = True
                     break
-                except PWTimeout:
-                    continue
+                page.wait_for_timeout(1000)
+            if solved:
+                console.print("[green]  ✓ CAPTCHA 통과 확인[/green]")
+                page.wait_for_timeout(2000)
+            else:
+                console.print("[yellow]  자동 감지 실패 — CAPTCHA를 푸셨으면 Enter를 눌러 계속하세요.[/yellow]")
+                try:
+                    input("  Enter 키: ")
+                except EOFError:
+                    pass
+
+        # 저장 완료 여부 확인 — 글쓰기 화면(newpost)을 벗어났는지로 판단
+        saved = "newpost" not in page.url
+
+        if confirmed and saved:
+            console.print(Panel(
+                f"[green]업로드 완료![/green]\n"
+                f"블로그: https://{blog_name}.tistory.com/manage",
+                border_style="green",
+            ))
+        elif confirmed and not saved:
+            console.print(Panel(
+                "[yellow]저장 버튼은 눌렀지만 아직 글쓰기 화면에 남아있습니다.\n"
+                "브라우저 창에서 정상적으로 저장됐는지 직접 확인해주세요.[/yellow]",
+                border_style="yellow",
+            ))
         else:
-            for selector in [
-                "label[for='visibility-public']",
-                "input[value='3'] + label",
-                "button:has-text('공개')",
-            ]:
-                try:
-                    page.click(selector, timeout=2000)
-                    break
-                except PWTimeout:
-                    continue
+            console.print(Panel(
+                "[red]발행 확인 버튼을 찾지 못했습니다. 브라우저 창에서 직접 확인 후 저장해주세요.[/red]",
+                border_style="red",
+            ))
 
-        # 최종 확인 버튼
-        for selector in [
-            "button.btn-publish-confirm",
-            "button:has-text('확인')",
-            "button:has-text('완료')",
-        ]:
-            try:
-                page.click(selector, timeout=3000)
-                break
-            except PWTimeout:
-                continue
-
-        page.wait_for_timeout(2000)
-        console.print(Panel(
-            f"[green]업로드 완료![/green]\n"
-            f"블로그: https://{blog_name}.tistory.com/manage",
-            border_style="green",
-        ))
-
-        input("브라우저를 닫으려면 Enter를 누르세요...")
+        try:
+            input("브라우저를 닫으려면 Enter를 누르세요...")
+        except EOFError:
+            pass
         browser.close()
 
 
