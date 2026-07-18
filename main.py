@@ -14,6 +14,7 @@ from rich.panel import Panel
 from pipeline import run_pipeline
 from research_agent import run_topic_proposal
 from tistory_agent import setup_tistory_auth
+from topic_history import record_topic
 from upload_to_tistory import upload as tistory_upload
 
 load_dotenv()
@@ -39,11 +40,20 @@ def main():
     parser.add_argument("--post", action="store_true", help="완성 글을 티스토리에 자동 등록")
     parser.add_argument("--public", action="store_true", help="티스토리 등록 시 공개로 업로드 (기본: 비공개)")
     parser.add_argument("--setup-tistory", action="store_true", help="티스토리 OAuth 인증 초기 설정")
+    parser.add_argument("--post-file", type=str, default=None, metavar="PATH", help="이미 저장된 .md 파일을 파이프라인 재실행 없이 티스토리에 등록")
     args = parser.parse_args()
 
     # 티스토리 인증 설정 (단독 실행)
     if args.setup_tistory:
         setup_tistory_auth()
+        return
+
+    # 기존 저장 파일을 티스토리에 등록 (단독 실행, OpenAI API 키 불필요)
+    if args.post_file:
+        if not os.path.exists(args.post_file):
+            console.print(f"[red]파일을 찾을 수 없습니다:[/red] {args.post_file}")
+            return
+        tistory_upload(args.post_file, public=args.public)
         return
 
     if not os.getenv("OPENAI_API_KEY"):
@@ -71,9 +81,18 @@ def main():
         table.add_column("주제", width=26)
         table.add_column("유형", width=12)
         table.add_column("각도", width=12)
+        table.add_column("네이버 상승지수", width=12, justify="center")
         table.add_column("선정 이유", width=38)
         for i, c in enumerate(candidates, 1):
-            table.add_row(str(i), c.get("topic", "—"), c.get("type", "—"), c.get("angle", "—"), c.get("reason", "—"))
+            naver_score = c.get("naver_score")
+            table.add_row(
+                str(i),
+                c.get("topic", "—"),
+                c.get("type", "—"),
+                c.get("angle", "—"),
+                f"{naver_score}" if naver_score is not None else "—",
+                c.get("reason", "—"),
+            )
         console.print()
         from rich.panel import Panel as _Panel
         console.print(_Panel(table, title="[bold cyan]주제 후보[/bold cyan]", border_style="cyan"))
@@ -96,6 +115,7 @@ def main():
 
     filename = save_output(article, research.topic)
     console.print(f"[green]저장 완료:[/green] {filename}")
+    record_topic(research.topic, research.keyword)
 
     if args.post:
         console.print()

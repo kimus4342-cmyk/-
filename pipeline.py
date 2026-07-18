@@ -22,6 +22,7 @@ def run_pipeline(
     auto_post: bool = False,
     post_visibility: str = "0",
 ) -> tuple[str, ResearchOutput]:
+    selected_keyword = ""
     if preset_topic:
         selected_topic = preset_topic
         console.print(Panel(
@@ -43,14 +44,17 @@ def run_pipeline(
             table.add_column("주제", width=18)
             table.add_column("유형", width=10)
             table.add_column("각도", width=10)
+            table.add_column("네이버 상승지수", width=12, justify="center")
             table.add_column("선정 이유", width=44)
 
             for i, c in enumerate(candidates, 1):
+                naver_score = c.get("naver_score")
                 table.add_row(
                     str(i),
                     c.get("topic", "—"),
                     c.get("type", "—"),
                     c.get("angle", "—"),
+                    f"{naver_score}" if naver_score is not None else "—",
                     c.get("reason", "—"),
                 )
 
@@ -58,7 +62,9 @@ def run_pipeline(
             console.print(Panel(table, title="[bold cyan]① 주제 후보[/bold cyan]", border_style="cyan"))
             console.print()
 
-            selected_topic = _ask_selection(candidates)
+            chosen = _ask_selection(candidates)
+            selected_topic = chosen.get("topic", "미분류 주제")
+            selected_keyword = chosen.get("keyword", "")
 
     console.print(Panel(
         f"[bold]선택된 주제:[/bold] {selected_topic}",
@@ -81,6 +87,7 @@ def run_pipeline(
     # ② 리서치 에이전트
     with _spin(f"'{refined_topic}' 논문·제품 리서치 중..."):
         research = run_research_agent(refined_topic)
+    research.keyword = selected_keyword
 
     product_summary = ', '.join(p.name for p in research.products) if research.products else "[red]제품 없음 — 작성 단계에서 기준만 제시됩니다[/red]"
     console.print(Panel(
@@ -193,7 +200,7 @@ def run_pipeline(
     return enhancement.enhanced_article, research
 
 
-def _ask_selection(candidates: list[dict]) -> str:
+def _ask_selection(candidates: list[dict]) -> dict:
     valid = {str(i) for i in range(1, len(candidates) + 1)}
     while True:
         try:
@@ -203,7 +210,7 @@ def _ask_selection(candidates: list[dict]) -> str:
             choice = "1"
 
         if choice in valid:
-            return candidates[int(choice) - 1].get("topic", "미분류 주제")
+            return candidates[int(choice) - 1]
         console.print(f"[red]1~{len(candidates)} 중 하나를 입력하세요.[/red]")
 
 

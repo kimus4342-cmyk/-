@@ -5,12 +5,16 @@ from rich.console import Console
 
 from models import ResearchOutput, Product
 from pubmed_client import search_papers
+from topic_history import load_recent_keywords
+from naver_trend import get_trend_scores, is_configured as naver_configured
 from config import (
     RESEARCH_MODEL,
     RESEARCH_MAX_TOKENS,
     RESEARCH_SYSTEM_PROMPT,
-    TOPIC_PROPOSAL_PROMPT,
-    TOPIC_PROPOSAL_MAX_TOKENS,
+    TOPIC_KEYWORD_PROMPT,
+    TOPIC_KEYWORD_MAX_TOKENS,
+    TOPIC_SENTENCE_PROMPT,
+    TOPIC_SENTENCE_MAX_TOKENS,
     TOPIC_REFINEMENT_PROMPT,
     TOPIC_REFINEMENT_MAX_TOKENS,
 )
@@ -81,26 +85,77 @@ _TOPIC_CATEGORIES = [
     "재생·회복·안티에이징",
     "선케어·자외선 차단",
     "눈가·넥·국소 부위 관리",
-    "뷰티 디바이스·기기",
     "성분 비교·선택 기준",
 ]
 
 
 def run_topic_proposal() -> list[dict]:
-    """주제 후보 5개를 제안하고 반환. 실행마다 랜덤 카테고리로 다양성 확보."""
+    """1) 트렌드 키워드 10개 브레인스토밍 → 2) 네이버 최근 상승 지수로 상위 5개 선별
+    → 3) 살아남은 키워드로만 주제 문장 완성. 실행마다 랜덤 카테고리로 다양성 확보."""
     client = openai.OpenAI()
     category = random.choice(_TOPIC_CATEGORIES)
     console.print(f"[dim]이번 주제 탐색 카테고리: {category}[/dim]")
+
+    recent_keywords = load_recent_keywords()
+    keywords = _propose_keywords(client, category, recent_keywords)
+    if not keywords:
+        return []
+
+    _attach_naver_scores(keywords)
+    top_keywords = _rank_and_trim(keywords)
+    return _write_sentences(client, top_keywords)
+
+
+def _propose_keywords(client: openai.OpenAI, category: str, recent_keywords: list[str]) -> list[dict]:
+    history_block = ""
+    if recent_keywords:
+        history_block = (
+            "\n\n아래는 최근에 이미 다룬 키워드입니다. 절대 다시 제안하지 마세요:\n"
+            + "\n".join(f"- {k}" for k in recent_keywords)
+        )
     response = client.chat.completions.create(
         model=RESEARCH_MODEL,
-        max_tokens=TOPIC_PROPOSAL_MAX_TOKENS,
+        max_tokens=TOPIC_KEYWORD_MAX_TOKENS,
         messages=[
-            {"role": "system", "content": TOPIC_PROPOSAL_PROMPT},
-            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 주제 후보 5개를 제안해줘. 5개 중 1~2개는 [{category}] 관련 주제를 포함하고, 나머지는 다른 유형에서 다양하게 선택해줘."},
+            {"role": "system", "content": TOPIC_KEYWORD_PROMPT},
+            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 키워드 후보 10개를 제안해줘. 10개 중 2~3개는 [{category}] 관련 유형을 포함하고, 나머지는 다양하게 선택해줘.{history_block}"},
         ],
     )
     raw = (response.choices[0].message.content or "").strip()
-    return _parse_candidates(raw)
+    return _filter_keywords(_parse_blocks(raw), recent_keywords)
+
+
+def _write_sentences(client: openai.OpenAI, top_keywords: list[dict]) -> list[dict]:
+    """네이버 검증을 통과한 키워드들로 주제 문장을 완성한다.
+    키워드·유형·네이버 점수는 LLM 출력과 무관하게 원본(top_keywords)을 그대로 신뢰한다."""
+    lines = [
+        f"{i}. 키워드: {k.get('keyword', '')} | 유형: {k.get('type', '')} | 트렌드 근거: {k.get('reason', '')}"
+        for i, k in enumerate(top_keywords, 1)
+    ]
+    user_content = (
+        f"아래 {len(top_keywords)}개 키워드로, 각각 CANDIDATE_1~{len(top_keywords)} 블록을 순서대로 작성해줘 "
+        "(키워드·유형은 반드시 그대로 유지):\n" + "\n".join(lines)
+    )
+    response = client.chat.completions.create(
+        model=RESEARCH_MODEL,
+        max_tokens=TOPIC_SENTENCE_MAX_TOKENS,
+        messages=[
+            {"role": "system", "content": TOPIC_SENTENCE_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+    )
+    raw = (response.choices[0].message.content or "").strip()
+    sentences = _parse_blocks(raw)
+
+    result = []
+    for i, k in enumerate(top_keywords):
+        c = dict(sentences[i]) if i < len(sentences) else {}
+        c["keyword"] = k.get("keyword", "")
+        c["type"] = k.get("type", "")
+        if k.get("naver_score") is not None:
+            c["naver_score"] = k["naver_score"]
+        result.append(c)
+    return result
 
 
 def run_topic_refinement(topic: str) -> str:
@@ -154,48 +209,111 @@ _URL_RE = re.compile(r'\(?https?://\S+\)?')
 _EXCLUDED_INGREDIENTS = {"레티놀", "히알루론산", "콜라겐", "세라마이드"}
 
 
-def _parse_candidates(raw: str) -> list[dict]:
-    candidates = []
+_FIELD_MAP = {
+    "주제": "topic",
+    "유형": "type",
+    "각도": "angle",
+    "키워드": "keyword",
+    "이유": "reason",
+}
+
+
+def _parse_blocks(raw: str) -> list[dict]:
+    """"=== 아무개_N ===" 로 구분되고 "필드: 값" 줄이 나열되는 출력을 공통 파싱한다.
+    KEYWORD_N(키워드/유형/이유)과 CANDIDATE_N(주제/유형/각도/키워드/이유) 둘 다 이 형식이라 재사용한다."""
+    blocks: list[dict] = []
     current: dict = {}
     for line in raw.splitlines():
         line = line.strip()
-        if line.startswith("=== CANDIDATE_") and line.endswith(" ==="):
+        if line.startswith("=== ") and line.endswith(" ==="):
             if current:
-                candidates.append(current)
+                blocks.append(current)
             current = {}
-        elif line.startswith("주제:"):
-            current["topic"] = line.split(":", 1)[1].strip()
-        elif line.startswith("유형:"):
-            current["type"] = line.split(":", 1)[1].strip()
-        elif line.startswith("각도:"):
-            current["angle"] = line.split(":", 1)[1].strip()
-        elif line.startswith("이유:"):
-            reason = line.split(":", 1)[1].strip()
-            reason = _URL_RE.sub("", reason)
-            reason = re.sub(r'[\s\(]+$', '', reason).strip()
-            current["reason"] = reason
+            continue
+        for kr, en in _FIELD_MAP.items():
+            if line.startswith(f"{kr}:"):
+                value = line.split(":", 1)[1].strip()
+                if en == "reason":
+                    value = _URL_RE.sub("", value)
+                    value = re.sub(r'[\s\(]+$', '', value).strip()
+                current[en] = value
+                break
     if current:
-        candidates.append(current)
+        blocks.append(current)
+    return blocks
 
-    # 중복 주제 제거 (주제명 동일하거나 제외 성분 포함된 후보 필터)
-    seen_topics: set[str] = set()
-    seen_keywords: list[set[str]] = []  # 이미 등록된 후보의 키워드 집합 목록
+
+def _filter_keywords(items: list[dict], recent_keywords: list[str]) -> list[dict]:
+    """제외 성분 포함, 최근 사용 키워드와 정확히 겹침, 배치 내 중복 키워드를 걸러낸다."""
+    recent_set = {k.strip().lower() for k in recent_keywords}
+    seen: set[str] = set()
     filtered = []
-    for c in candidates:
-        topic = c.get("topic", "")
-        if topic in seen_topics:
+    for it in items:
+        if it.get("type") == "뷰티디바이스":
+            continue  # 당분간 화장품 성분/제품 위주로만 진행
+        kw = it.get("keyword", "")
+        terms = [t.strip() for t in kw.split(",") if t.strip()]
+        if not terms:
             continue
-        if any(ing in topic for ing in _EXCLUDED_INGREDIENTS):
+        if any(any(ing in t for ing in _EXCLUDED_INGREDIENTS) for t in terms):
             continue
-        # 키워드 기반 유사 중복 체크: 2글자 이상 한국어/영문 단어 추출
-        words = set(re.findall(r'[가-힣A-Za-z]{2,}', topic))
-        # 이미 등록된 후보와 겹치는 키워드가 2개 이상이면 중복으로 간주
-        if any(len(words & prev) >= 3 for prev in seen_keywords):
+        if any(t.lower() in recent_set for t in terms):
             continue
-        seen_topics.add(topic)
-        seen_keywords.append(words)
-        filtered.append(c)
+        key = kw.strip().lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        filtered.append(it)
     return filtered
+
+
+def _attach_naver_scores(candidates: list[dict]) -> None:
+    """각 후보에 네이버 데이터랩 40-50대 여성 기준 "최근 상승 지수"(naver_score)를 채워 넣는다.
+    100=변화 없음, 100 초과=최근 상승. "A, B" 형태의 비교 키워드는 서로 다른 성분이라
+    한 그룹에 합치면 조회가 깨지므로, 항목별로 별도 그룹 조회한 뒤 후보당 최댓값을 대표 점수로 사용한다.
+    API 미설정·요청 실패 시 조용히 건너뛴다 (candidates는 그대로 사용 가능)."""
+    if not naver_configured():
+        return
+    term_groups: dict[str, str] = {}
+    owner: dict[str, int] = {}
+    for i, c in enumerate(candidates):
+        kw = c.get("keyword")
+        if not kw:
+            continue
+        for j, term in enumerate(t.strip() for t in kw.split(",")):
+            if not term:
+                continue
+            key = f"{i}_{j}"
+            term_groups[key] = term
+            owner[key] = i
+
+    scores = get_trend_scores(term_groups)
+    if not scores:
+        console.print("[dim]네이버 데이터랩 조회 실패 또는 결과 없음 — 관심도 정보 없이 진행[/dim]")
+        return
+
+    per_candidate: dict[int, list[float]] = {}
+    for key, score in scores.items():
+        idx = owner.get(key)
+        if idx is not None:
+            per_candidate.setdefault(idx, []).append(score)
+    for i, c in enumerate(candidates):
+        values = per_candidate.get(i)
+        if values:
+            c["naver_score"] = round(max(values), 1)
+
+
+_FINAL_CANDIDATE_COUNT = 5
+
+
+def _rank_and_trim(candidates: list[dict], keep: int = _FINAL_CANDIDATE_COUNT) -> list[dict]:
+    """네이버 관심도가 있으면 높은 순으로 정렬해 상위 keep개만 남긴다.
+    점수가 하나도 없으면 (미설정·조회 실패) LLM이 제시한 원래 순서 그대로 앞에서부터 keep개를 쓴다."""
+    scored = [c for c in candidates if c.get("naver_score") is not None]
+    if not scored:
+        return candidates[:keep]
+    ranked = sorted(candidates, key=lambda c: c.get("naver_score", -1), reverse=True)
+    return ranked[:keep]
 
 
 def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:

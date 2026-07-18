@@ -15,6 +15,7 @@ class ResearchOutput(BaseModel):
     key_insights: str
     editorial_angle: str = ""  # 각도 유형 + 선택 이유 + 오프닝 훅
     products: list[Product]
+    keyword: str = ""  # 주제 선정 단계에서 쓰인 네이버 검색용 핵심 키워드 (이력 기록용)
 
 class ReviewInsights(BaseModel):
     positive_patterns: str = ""
