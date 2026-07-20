@@ -100,6 +100,17 @@ def run_pipeline(
     if not research.products:
         console.print("[yellow]경고: 실제 제품을 찾지 못했습니다. 리서치를 다시 실행하거나 주제를 변경하는 것을 권장합니다.[/yellow]")
 
+    # 근거 품질 검사 — 빈약하면 auto_post 차단
+    insights_weak = _is_insights_weak(research.key_insights)
+    if insights_weak:
+        console.print(Panel(
+            "[yellow]논문·임상 근거가 충분히 확보되지 않았습니다.[/yellow]\n"
+            "글 작성과 저장은 계속 진행하지만 [bold red]자동 게시는 차단[/bold red]됩니다.\n"
+            "[dim]생성된 글을 직접 검수한 뒤 수동으로 게시하세요.[/dim]",
+            title="[bold yellow]⚠ 근거 품질 경고[/bold yellow]",
+            border_style="yellow",
+        ))
+
     # ②.5 후기 수집 에이전트 (실패해도 파이프라인 계속)
     # selected_topic(사용자 선택 원본)은 짧고 검색에 적합 — refined/research.topic은 긴 제목이라 부적합
     with _spin(f"'{selected_topic}' 실사용 후기 패턴 수집 중..."):
@@ -172,7 +183,14 @@ def run_pipeline(
     ))
 
     # ⑥ 티스토리 자동 등록 (옵션)
-    if auto_post:
+    if auto_post and insights_weak:
+        console.print(Panel(
+            "[red]근거 품질 미달로 자동 게시를 건너뜁니다.[/red]\n"
+            "[dim]글은 로컬에 저장되었습니다. 내용을 직접 확인 후 수동으로 게시하세요.[/dim]",
+            title="[bold red]⑥ 자동 게시 차단[/bold red]",
+            border_style="red",
+        ))
+    elif auto_post:
         with _spin("티스토리에 등록 중..."):
             post_url = post_to_tistory(
                 enhancement.enhanced_article,
@@ -198,6 +216,20 @@ def run_pipeline(
             ))
 
     return enhancement.enhanced_article, research
+
+
+def _is_insights_weak(key_insights: str) -> bool:
+    """key_insights가 빈약하면 True 반환.
+    판단 기준: 200자 미만이거나 논문 없음 표시가 있으면 빈약으로 간주."""
+    if not key_insights or len(key_insights) < 80:
+        return True
+    weak_markers = [
+        "제공된 논문 없음",
+        "제공된 PubMed 논문 없음",
+        "논문 없음",
+        "기전 설명 위주",
+    ]
+    return any(marker in key_insights for marker in weak_markers)
 
 
 def _ask_selection(candidates: list[dict]) -> dict:
