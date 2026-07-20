@@ -185,13 +185,25 @@ def run_research_agent(topic: str) -> ResearchOutput:
 
     papers = search_papers(_pubmed_query(topic), max_results=4)
     if papers:
-        console.print(f"[dim]PubMed 논문 {len(papers)}편 확보[/dim]")
-        paper_block = "=== PubMed 논문 목록 ===\n" + "\n".join(p.format_for_prompt() for p in papers)
+        source_label = papers[0].source if hasattr(papers[0], "source") else "pubmed"
+        source_name = "PubMed" if source_label == "pubmed" else "Semantic Scholar"
+        console.print(f"[dim]{source_name} 논문 {len(papers)}편 확보[/dim]")
+        paper_block = f"=== 논문 목록 (출처: {source_name}) ===\n" + "\n".join(p.format_for_prompt() for p in papers)
+        search_instruction = ""
     else:
-        console.print("[dim]PubMed 논문 없음 — 기전 설명 위주로 진행[/dim]")
-        paper_block = "(제공된 PubMed 논문 없음)"
+        console.print("[dim]외부 논문 API 접근 불가 — 모델 웹 검색으로 논문 직접 탐색[/dim]")
+        paper_block = "(외부 API 접근 불가 — 아래 지시에 따라 웹 검색으로 직접 논문을 탐색할 것)"
+        pubmed_query = _pubmed_query(topic)
+        search_instruction = (
+            f"\n\n[논문 탐색 지시]\n"
+            f"외부 API로 논문을 가져오지 못했습니다. web_search 도구를 사용해 아래 절차로 논문을 직접 탐색하세요:\n"
+            f"1. 검색어 예시: site:pubmed.ncbi.nlm.nih.gov \"{pubmed_query}\"\n"
+            f"2. 또는: \"{pubmed_query}\" randomized controlled trial skin\n"
+            f"3. 실제 존재하는 논문(제목·저널·연도·URL 확인 가능한 것)만 KEY_INSIGHTS에 인용할 것\n"
+            f"4. 검색 결과에서 확인되지 않는 논문은 만들어내지 말 것"
+        )
 
-    user_content = f"선정된 주제: {topic} (피부에 바르는 스킨케어 화장품 기준, 먹는 보충제 제외)\n\n{paper_block}\n\n이 주제로 리서치를 진행해줘."
+    user_content = f"선정된 주제: {topic} (피부에 바르는 스킨케어 화장품 기준, 먹는 보충제 제외)\n\n{paper_block}{search_instruction}\n\n이 주제로 리서치를 진행해줘."
 
     response = client.chat.completions.create(
         model=RESEARCH_MODEL,
