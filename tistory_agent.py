@@ -26,7 +26,7 @@ _STYLE = """\
 .bloomi h2{font-size:19px;font-weight:700;color:#1a1a1a;margin:36px 0 14px;
   padding:11px 16px;background:#f0f5e4;border-left:5px solid #6b8c3a;border-radius:0 8px 8px 0}
 .bloomi h3{font-size:17px;font-weight:600;color:#222;margin:28px 0 12px;
-  padding-bottom:7px;border-bottom:2px solid #c8e0a0}
+  padding-bottom:7px;border-bottom:2px solid #fbe7d8}
 .bloomi h4{font-size:16px;font-weight:600;color:#333;margin:22px 0 10px;
   padding-left:11px;border-left:3px solid #6b8c3a}
 .bloomi p{margin:13px 0}
