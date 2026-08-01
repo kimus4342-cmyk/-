@@ -9,7 +9,8 @@
 ## 프로젝트 개요
 OpenAI API 기반 4단계 파이프라인으로 한국 40-50대 여성 타깃 스킨케어 블로그 글을 자동 생성한다.
 
-**파이프라인 순서:** 리서치 에이전트 → 작성 에이전트 → 검수 에이전트 → 고도화 에이전트
+**파이프라인 순서:** 리서치 에이전트 → 작성 에이전트 → 고도화 에이전트 → 검수 에이전트
+(검수를 마지막에 두어, 고도화 단계가 추가하는 트렌드·SEO·경쟁 차별화 내용도 발행 전 검수를 반드시 거치도록 함)
 
 ## 실행 방법
 
@@ -38,8 +39,8 @@ Windows에서는 `run.bat` 사용 가능.
 | `models.py` | Pydantic 데이터 모델 (`ResearchOutput`, `ReviewResult`, `EnhancementResult`) |
 | `research_agent.py` | ① 리서치 에이전트 |
 | `writing_agent.py` | ② 작성 에이전트 |
-| `review_agent.py` | ③ 검수 에이전트 |
-| `enhancement_agent.py` | ④ 고도화 에이전트 (트렌드·SEO·경쟁 차별화) |
+| `enhancement_agent.py` | ③ 고도화 에이전트 (트렌드·SEO·경쟁 차별화) |
+| `review_agent.py` | ④ 검수 에이전트 (고도화 이후 실행되는 최종 발행 게이트) |
 
 ## 모델 설정 (`config.py`)
 
@@ -47,7 +48,7 @@ Windows에서는 `run.bat` 사용 가능.
 |------|--------|------|
 | `RESEARCH_MODEL` | `gpt-4o-mini-search-preview` | 웹 검색 포함 리서치 |
 | `WRITING_MODEL` | `gpt-4o` | 블로그 초안 작성 |
-| `REVIEW_MODEL` | `gpt-4o` | 16항목 체크리스트 검수 |
+| `REVIEW_MODEL` | `gpt-4o` | 24항목 체크리스트 검수 |
 | `ENHANCEMENT_SEARCH_MODEL` | `gpt-4o-mini-search-preview` | 트렌드·SEO·경쟁 분석 (웹 검색) |
 | `ENHANCEMENT_MODEL` | `gpt-4o` | 분석 결과 글 반영 |
 
@@ -63,7 +64,7 @@ Windows에서는 `run.bat` 사용 가능.
 
 **ReviewResult** — 검수 에이전트 출력
 - `score`: 1~10 (8~10 승인, 6~7 부분 수정, 1~5 전면 재작성)
-- `feedback`: 16항목 체크리스트 결과
+- `feedback`: 24항목 체크리스트 결과
 - `final_article`: 최종 완성 글
 
 **EnhancementResult** — 고도화 에이전트 출력
@@ -77,8 +78,8 @@ Windows에서는 `run.bat` 사용 가능.
 프롬프트는 모두 `config.py`의 `*_SYSTEM_PROMPT` 상수에 집중되어 있다.
 
 - **리서치 프롬프트**: 출력 형식 섹션(`=== TOPIC ===` 등) 변경 시 `research_agent.py`의 파싱 로직도 함께 수정
-- **작성 프롬프트**: 글 구조(① 고정 요소 / ② 중간 섹션) 변경 시 검수 체크리스트(16항목)도 정합성 확인
-- **검수 프롬프트**: 체크리스트 항목 수 변경 시 판정 기준(Yes 14개 이상 등) 수치도 함께 조정
+- **작성 프롬프트**: 글 구조(① 고정 요소 / ② 중간 섹션) 변경 시 검수 체크리스트(24항목)도 정합성 확인
+- **검수 프롬프트**: 체크리스트 항목 수 변경 시 판정 기준(Yes 23개 이상 등) 수치도 함께 조정
 - **고도화 검색 프롬프트** (`ENHANCEMENT_SEARCH_PROMPT`): 출력 섹션(`=== TRENDS ===` 등) 변경 시 `enhancement_agent.py`의 `_parse_search()` 로직도 함께 수정
 - **고도화 반영 프롬프트** (`ENHANCEMENT_APPLY_PROMPT`): 출력 섹션(`=== ENHANCED_ARTICLE ===`) 변경 시 `_parse_enhanced()` 로직도 함께 수정
 

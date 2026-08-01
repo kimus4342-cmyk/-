@@ -146,36 +146,36 @@ def run_pipeline(
     else:
         console.print("[dim]③.5 제품 재검색 — 새 제품 없음, 기존 유지[/dim]")
 
-    # ④ 검수 에이전트
+    # ④ 고도화 에이전트 (검수보다 먼저 실행 — 고도화가 추가한 내용도 검수를 반드시 거치게 함)
+    with _spin("트렌드·SEO·경쟁 분석 및 고도화 중..."):
+        enhancement = run_enhancement_agent(draft, research)
+
+    console.print(Panel(
+        f"[bold]SEO 키워드:[/bold] {enhancement.seo_keywords[:120]}{'...' if len(enhancement.seo_keywords) > 120 else ''}\n\n"
+        f"[bold]차별화 포인트:[/bold]\n{enhancement.competitor_gaps[:200]}{'...' if len(enhancement.competitor_gaps) > 200 else ''}\n\n"
+        f"[dim]고도화 완료 — {len(enhancement.enhanced_article):,}자[/dim]",
+        title="[bold green]④ 고도화 에이전트 완료[/bold green]",
+        border_style="green",
+    ))
+
+    # ⑤ 검수 에이전트 (고도화까지 반영된 최종본을 마지막 게이트로 검수 — 발행되는 글과 검수한 글이 항상 일치)
     with _spin("가독성·흥미도 검수 중..."):
-        review = run_review_agent(draft, research)
+        review = run_review_agent(enhancement.enhanced_article, research)
 
     verdict = "[green]승인[/green]" if review.score >= 8 else "[red]직접 수정 완료[/red]"
     short_feedback = review.feedback[:200] + ("..." if len(review.feedback) > 200 else "")
     console.print(Panel(
         f"[bold]검수 점수:[/bold] {review.score}/10  {verdict}\n\n"
         f"[bold]피드백:[/bold]\n{short_feedback}",
-        title="[bold magenta]④ 검수 에이전트 완료[/bold magenta]",
+        title="[bold magenta]⑤ 검수 에이전트 완료[/bold magenta]",
         border_style="magenta",
-    ))
-
-    # ⑤ 고도화 에이전트
-    with _spin("트렌드·SEO·경쟁 분석 및 고도화 중..."):
-        enhancement = run_enhancement_agent(review.final_article, research)
-
-    console.print(Panel(
-        f"[bold]SEO 키워드:[/bold] {enhancement.seo_keywords[:120]}{'...' if len(enhancement.seo_keywords) > 120 else ''}\n\n"
-        f"[bold]차별화 포인트:[/bold]\n{enhancement.competitor_gaps[:200]}{'...' if len(enhancement.competitor_gaps) > 200 else ''}\n\n"
-        f"[dim]고도화 완료 — {len(enhancement.enhanced_article):,}자[/dim]",
-        title="[bold green]⑤ 고도화 에이전트 완료[/bold green]",
-        border_style="green",
     ))
 
     # ⑥ 티스토리 자동 등록 (옵션)
     if auto_post:
         with _spin("티스토리에 등록 중..."):
             post_url = post_to_tistory(
-                enhancement.enhanced_article,
+                review.final_article,
                 seo_keywords=enhancement.seo_keywords,
                 visibility=post_visibility,
             )
@@ -197,7 +197,7 @@ def run_pipeline(
                 border_style="red",
             ))
 
-    return enhancement.enhanced_article, research
+    return review.final_article, research
 
 
 def _ask_selection(candidates: list[dict]) -> dict:

@@ -5,7 +5,13 @@
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
       "Bash(python -c ' *)",
       "Bash(rm -f \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI/topic_history.json\")",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git ls-remote *)",
+      "Bash(git fetch *)",
+      "Bash(git remote *)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m py_compile review_agent.py research_agent.py models.py config.py)"
     ]
   }
 }

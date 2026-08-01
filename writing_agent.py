@@ -97,7 +97,9 @@ def run_writing_agent(research: ResearchOutput, review_insights: ReviewInsights 
         product_block = (
             "[추천 제품 목록]: 실제 제품 정보를 확보하지 못했습니다.\n"
             "절대로 '제품 A', '제품 B', '제품 C' 같은 플레이스홀더나 가상의 제품명을 만들지 마세요.\n"
-            "성분표 비교 표와 Pick 추천 섹션에서는 실제 브랜드명 대신 선택 기준(농도·성분 조합·포장·저자극)만 제시하세요."
+            "성분표 비교 표와 Pick 추천 섹션에서는 실제 브랜드명 대신 선택 기준(농도·성분 조합·포장·저자극)만 제시하세요.\n"
+            "선택 기준은 2~3개만, 각 기준당 100~150자 이내로 간결하게 작성하세요.\n"
+            "제품 예시가 없다고 해서 상황별 추가 안내나 부연 설명을 덧붙여 분량을 채우지 마세요."
         )
 
     _SECTION_COUNT = {"성분심화": 3, "카테고리비교": 3, "고민해결": 4, "뷰티디바이스": 4}
@@ -127,7 +129,7 @@ def run_writing_agent(research: ResearchOutput, review_insights: ReviewInsights 
 타겟 독자: 40-50대 한국 여성 (피부 고민: {research.skin_concern})
 핵심 메시지: {research.core_message}
 피해야 할 표현: 과장 광고, 단정적 표현, 즉각 효과 주장
-글 길이: 2,000~2,800자
+글 길이: 2,500~3,500자
 {type_block}
 {angle_block}
 
@@ -141,7 +143,7 @@ def run_writing_agent(research: ResearchOutput, review_insights: ReviewInsights 
 - TOPIC_TYPE({research.topic_type})에 맞는 중간 섹션 {section_count}개를 작성할 것.
 - EDITORIAL_ANGLE의 "각도 유형"은 오프닝 훅 방향과 각 섹션의 프레이밍 톤에만 반영할 것 (섹션 수·내용은 TOPIC_TYPE 기준).
 - 제품 목록에 실제 제품이 있으면 반드시 "어떻게 고르고 시작할까" 섹션에 제품명과 함께 소개할 것.
-- 글 전체 최소 1,800자 이상 — 각 중간 섹션은 반드시 300자 이상 작성할 것.
+- 글 전체 최소 2,500자 이상 — 각 중간 섹션은 반드시 300자 이상 작성할 것.
 - 300자 미만으로 끝나는 섹션은 KEY_INSIGHTS에서 추가 근거를 1~2단락 더 풀어 써서 반드시 보강할 것. 보강 없이 짧은 섹션을 제출하는 것은 절대 금지.
 - 제출 전에 중간 섹션 각각의 분량을 확인하고, 300자 미만이면 반드시 해당 섹션을 보강한 후 제출할 것.
 - 본문 문장에서 의문을 표현할 때도 '-까요?' 금지. '~인가', '~인지', '~살펴봐야 합니다' 형태로 작성할 것.
@@ -154,22 +156,12 @@ web_search 사용 금지.
     draft_text_len = len(_URL_RE.sub('', draft))
 
     # 글 길이 부족 시 자동 보강 1회
-    if draft_text_len < 1600:
-        expand_prompt = f"""다음 블로그 글은 현재 {draft_text_len}자입니다 (URL 제외). 목표는 1,800자 이상입니다.
+    if draft_text_len < 2500:
+        expand_instruction = f"""다음 블로그 글은 현재 {draft_text_len}자입니다 (URL 제외). 목표는 2,500자 이상입니다.
 각 중간 섹션(#### 소제목 단위)에서 KEY_INSIGHTS의 임상 근거와 독자 관점 함의를 1~2단락 추가해 보강하세요.
 소제목 구조와 전체 흐름은 그대로 유지하고, 내용만 풍부하게 늘립니다.
-구어체(-까요?/-요/-죠?) 절대 금지. 격식체로만 작성.
-
-===글 원문===
-{draft}
-===끝===
-
-보강된 전체 글을 출력하세요."""
-
-        expanded = _chat(WRITING_SYSTEM_PROMPT, expand_prompt)
-        expanded_text_len = len(_URL_RE.sub('', expanded))
-        if expanded_text_len > draft_text_len:
-            draft = expanded
+구어체(-까요?/-요/-죠?) 절대 금지. 격식체로만 작성."""
+        draft = run_revision(draft, expand_instruction, threshold=1.0)
 
     # 출처불명 인용 패턴 감지 시 교정 1회 (볼드 마크다운 제거 후 검사)
     draft_stripped = re.sub(r'\*{1,2}', '', draft)
@@ -202,8 +194,24 @@ web_search 사용 금지.
     return draft
 
 
+def run_revision(draft: str, instruction: str, threshold: float = 0.9) -> str:
+    """draft를 instruction에 따라 1회 수정. 원문 대비 글자수가 threshold 미만으로 줄면 원문을 유지한다."""
+    fix_prompt = f"""{instruction}
+
+===글===
+{draft}
+===끝===
+
+수정된 전체 글을 출력하세요."""
+
+    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
+    fixed_len = len(_URL_RE.sub('', fixed))
+    original_len = len(_URL_RE.sub('', draft))
+    return fixed if fixed_len >= original_len * threshold else draft
+
+
 def _fix_vague_citations(draft: str) -> str:
-    fix_prompt = f"""다음 블로그 글에서 출처불명 인용 표현을 찾아 수정하세요.
+    instruction = """다음 블로그 글에서 출처불명 인용 표현을 찾아 수정하세요.
 
 수정 대상 — 아래 형태가 있으면 반드시 수정 (볼드(**) 처리된 형태도 포함):
 - "2023년 연구에 따르면", "**2024년 연구**에 따르면" 등 연도+연구 조합 (볼드 여부 무관)
@@ -224,19 +232,8 @@ def _fix_vague_citations(draft: str) -> str:
   예: "2024년 연구에서는 A가 B에 기여하는 것으로 나타났습니다" → "A는 B에 기여합니다"
 - 인용에 수치가 포함된 경우 출처 불명 수치도 함께 제거하세요.
 - 「논문 제목」(저널명, 연도) 형식의 올바른 인용은 수정하지 마세요.
-- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    # 교정 후 글이 너무 짧아지면 원문 유지
-    fixed_text_len = len(_URL_RE.sub('', fixed))
-    original_text_len = len(_URL_RE.sub('', draft))
-    return fixed if fixed_text_len >= original_text_len * 0.9 else draft
+- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요."""
+    return run_revision(draft, instruction, threshold=0.9)
 
 
 def _has_fabricated_journal_citation(draft: str, valid_urls: set) -> bool:
@@ -248,7 +245,7 @@ def _has_fabricated_journal_citation(draft: str, valid_urls: set) -> bool:
 
 
 def _fix_fabricated_citations(draft: str) -> str:
-    fix_prompt = f"""다음 블로그 글에서 출처 URL이 없는 저널명 인용을 찾아 수정하세요.
+    instruction = """다음 블로그 글에서 출처 URL이 없는 저널명 인용을 찾아 수정하세요.
 
 수정 대상:
 - "Journal of XYZ에서 발표한 연구에 따르면..." 형태의 인용 중 URL이 없는 것
@@ -257,22 +254,12 @@ def _fix_fabricated_citations(draft: str) -> str:
 수정 방법:
 - URL 없는 저널명 인용은 "~로 알려져 있습니다", "~가 확인됩니다" 등 서술형으로 바꾸세요.
 - 수치가 포함된 경우 수치도 제거하세요.
-- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_text_len = len(_URL_RE.sub('', fixed))
-    original_text_len = len(_URL_RE.sub('', draft))
-    return fixed if fixed_text_len >= original_text_len * 0.9 else draft
+- 글의 다른 부분(소제목·구조·분량)은 전혀 수정하지 마세요."""
+    return run_revision(draft, instruction, threshold=0.9)
 
 
 def _fix_missing_paper_citations(draft: str, key_insights: str) -> str:
-    fix_prompt = f"""다음 블로그 글에 PubMed 논문 인용이 없습니다.
+    instruction = f"""다음 블로그 글에 PubMed 논문 인용이 없습니다.
 KEY_INSIGHTS에 포함된 논문 중 글 내용과 가장 관련성 높은 것을 1~2개 골라 적절한 위치에 삽입하세요.
 
 인용 형식 (필수):
@@ -286,22 +273,12 @@ KEY_INSIGHTS에 포함된 논문 중 글 내용과 가장 관련성 높은 것�
 규칙:
 - 「논문 제목」(저널명, 연도) 이외의 인용 표현("연구에 따르면", "저널에 따르면" 등)은 추가하지 말 것
 - 글 구조·소제목·분량은 유지. 논문 인용 문장만 기존 단락에 자연스럽게 추가.
-- 삽입 위치는 해당 논문 내용이 가장 자연스럽게 연결되는 섹션을 선택할 것
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_len = len(_URL_RE.sub("", fixed))
-    original_len = len(_URL_RE.sub("", draft))
-    return fixed if fixed_len >= original_len * 0.9 else draft
+- 삽입 위치는 해당 논문 내용이 가장 자연스럽게 연결되는 섹션을 선택할 것"""
+    return run_revision(draft, instruction, threshold=0.9)
 
 
 def _fix_missing_review_patterns(draft: str, review_insights: ReviewInsights) -> str:
-    fix_prompt = f"""다음 블로그 글에 실사용자 후기 패턴이 반영되지 않았습니다.
+    instruction = f"""다음 블로그 글에 실사용자 후기 패턴이 반영되지 않았습니다.
 아래 패턴을 글 안에 자연스럽게 녹여주세요.
 
 [실사용 후기 패턴]
@@ -313,39 +290,19 @@ def _fix_missing_review_patterns(draft: str, review_insights: ReviewInsights) ->
 - 긍정 패턴 → 관련 섹션에서 "많은 분들이 실제로 경험하시는" 형태로 1~2곳
 - 부정 패턴 → 주의사항·흔한 실수 섹션에 통합
 - 절대 금지: 후기를 효능 근거로 인용하는 것 ("많은 사용자가 효과를 봤다는 것은..." 형태)
-- 글 구조·소제목·분량은 유지. 기존 내용 삭제 금지.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_len = len(_URL_RE.sub("", fixed))
-    original_len = len(_URL_RE.sub("", draft))
-    return fixed if fixed_len >= original_len * 0.9 else draft
+- 글 구조·소제목·분량은 유지. 기존 내용 삭제 금지."""
+    return run_revision(draft, instruction, threshold=0.9)
 
 
 def _fix_ingestion_content(draft: str) -> str:
-    fix_prompt = f"""다음 블로그 글에 '섭취', '복용', '경구 복용', '영양제' 등 먹는 제품 관련 내용이 포함되어 있습니다.
+    instruction = """다음 블로그 글에 '섭취', '복용', '경구 복용', '영양제' 등 먹는 제품 관련 내용이 포함되어 있습니다.
 이 글은 피부에 바르는 스킨케어 화장품(세럼·크림·앰플 등) 전용 블로그입니다.
 
 수정 방법:
 - 섭취·복용·경구 복용 언급이 있는 문장은 바르는 스킨케어 맥락으로 교체하거나 삭제하세요.
 - 먹는 방식의 임상 데이터를 인용한 경우, 해당 인용 전체를 삭제하고 같은 성분의 도포 방식 효과를 서술로 대체하세요.
-- 글의 구조·소제목·분량은 최대한 유지하세요.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_len = len(_URL_RE.sub("", fixed))
-    original_len = len(_URL_RE.sub("", draft))
-    return fixed if fixed_len >= original_len * 0.85 else draft
+- 글의 구조·소제목·분량은 최대한 유지하세요."""
+    return run_revision(draft, instruction, threshold=0.85)
 
 
 def _fix_missing_products(draft: str, missing) -> str:
@@ -355,7 +312,7 @@ def _fix_missing_products(draft: str, missing) -> str:
         + (f"\n  주요 성분: {p.ingredients}" if p.ingredients else "")
         for p in missing
     )
-    fix_prompt = f"""다음 블로그 글의 "어떻게 고르고 시작할까" 섹션에 아래 제품들이 빠져 있습니다. 해당 섹션에 추가해주세요.
+    instruction = f"""다음 블로그 글의 "어떻게 고르고 시작할까" 섹션에 아래 제품들이 빠져 있습니다. 해당 섹션에 추가해주세요.
 
 누락된 제품:
 {product_lines}
@@ -365,18 +322,8 @@ def _fix_missing_products(draft: str, missing) -> str:
 ② 다른 제품과 구별되는 차별점
 ③ 어떤 피부 타입·고민에 맞는지
 
-글의 다른 부분(소제목·구조)은 수정하지 마세요.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_text_len = len(_URL_RE.sub('', fixed))
-    original_text_len = len(_URL_RE.sub('', draft))
-    return fixed if fixed_text_len >= original_text_len * 0.9 else draft
+글의 다른 부분(소제목·구조)은 수정하지 마세요."""
+    return run_revision(draft, instruction, threshold=0.9)
 
 
 def replace_products_in_article(draft: str, products: list) -> str:
@@ -387,7 +334,7 @@ def replace_products_in_article(draft: str, products: list) -> str:
         + (f"\n  주요 성분: {p.ingredients}" if p.ingredients else "")
         for p in products
     )
-    fix_prompt = f"""다음 블로그 글의 "어떻게 고르고 시작할까" 섹션에서 제품 소개 부분을 아래 제품으로 교체해주세요.
+    instruction = f"""다음 블로그 글의 "어떻게 고르고 시작할까" 섹션에서 제품 소개 부분을 아래 제품으로 교체해주세요.
 
 교체할 제품 목록:
 {product_lines}
@@ -400,15 +347,5 @@ def replace_products_in_article(draft: str, products: list) -> str:
 규칙:
 - 제품 소개 문단만 교체. 선택 기준·나머지 섹션은 절대 수정하지 말 것.
 - 제품명을 첫 문장에 반드시 명시.
-- 격식체(-입니다/-습니다) 유지.
-
-===글===
-{draft}
-===끝===
-
-수정된 전체 글을 출력하세요."""
-
-    fixed = _chat(WRITING_SYSTEM_PROMPT, fix_prompt)
-    fixed_text_len = len(_URL_RE.sub('', fixed))
-    original_text_len = len(_URL_RE.sub('', draft))
-    return fixed if fixed_text_len >= original_text_len * 0.85 else draft
+- 격식체(-입니다/-습니다) 유지."""
+    return run_revision(draft, instruction, threshold=0.85)

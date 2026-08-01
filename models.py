@@ -16,6 +16,7 @@ class ResearchOutput(BaseModel):
     editorial_angle: str = ""  # 각도 유형 + 선택 이유 + 오프닝 훅
     products: list[Product]
     keyword: str = ""  # 주제 선정 단계에서 쓰인 네이버 검색용 핵심 키워드 (이력 기록용)
+    paper_titles: list[str] = []  # PubMed에서 실제로 확보한 논문 제목 목록 (검수 단계 인용 대조용)
 
 class ReviewInsights(BaseModel):
     positive_patterns: str = ""

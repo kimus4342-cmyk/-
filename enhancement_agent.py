@@ -2,7 +2,7 @@ import openai
 import re
 
 from models import EnhancementResult, ResearchOutput
-from writing_agent import _VAGUE_CITATION_RE, _fix_vague_citations, _INGESTION_RE, _fix_ingestion_content
+from writing_agent import _VAGUE_CITATION_RE, _fix_vague_citations, _INGESTION_RE, _fix_ingestion_content, run_revision
 
 _URL_RE = re.compile(r'https?://\S+')
 from config import (
@@ -75,6 +75,16 @@ def run_enhancement_agent(article: str, research: ResearchOutput) -> Enhancement
         enhanced_article = _fix_vague_citations(enhanced_article)
     if _INGESTION_RE.search(enhanced_article):
         enhanced_article = _fix_ingestion_content(enhanced_article)
+
+    # 글자수 상한(3,500자) 초과 시 압축 — 검수 단계로 넘어가는 부담도 함께 줄인다
+    if len(_URL_RE.sub('', enhanced_article)) > 3500:
+        shrink_instruction = """다음 블로그 글은 목표 분량(2,500~3,500자)을 초과했습니다. 3,500자 이내로 압축하세요.
+
+압축 방법:
+- 다른 섹션과 내용이 겹치는 섹션이 있으면 삭제하거나 겹치지 않는 섹션에 흡수시키세요.
+- 구체적 근거 없이 일반론만 나열하는 문단은 삭제하세요.
+- 핵심 기전 설명, 논문 인용, 수치, 소제목 구조, 고정 요소(오프닝·이런 분께 특히 맞습니다·어떻게 고르고 시작할까·마무리)는 삭제하지 말고 유지하세요."""
+        enhanced_article = run_revision(enhanced_article, shrink_instruction, threshold=0.5)
 
     return EnhancementResult(
         trends_found=trends,

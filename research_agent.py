@@ -17,6 +17,9 @@ from config import (
     TOPIC_SENTENCE_MAX_TOKENS,
     TOPIC_REFINEMENT_PROMPT,
     TOPIC_REFINEMENT_MAX_TOKENS,
+    PUBMED_QUERY_MODEL,
+    PUBMED_QUERY_MAX_TOKENS,
+    PUBMED_QUERY_PROMPT,
 )
 
 # PubMed는 영어 검색이므로 주요 성분명 매핑
@@ -51,6 +54,27 @@ def _pubmed_query(topic: str) -> str:
         if kr in lower:
             return en
     return topic
+
+
+def _translate_pubmed_query(client: openai.OpenAI, topic: str) -> str:
+    """고정 사전(_KR_TO_PUBMED)에 없는 신규 성분 주제를 PubMed 검색어로 번역한다.
+    실패·이상 출력 시 빈 문자열을 반환해 호출부가 원래 동작(한글 그대로 검색)으로 폴백하게 한다."""
+    try:
+        response = client.chat.completions.create(
+            model=PUBMED_QUERY_MODEL,
+            max_tokens=PUBMED_QUERY_MAX_TOKENS,
+            messages=[
+                {"role": "system", "content": PUBMED_QUERY_PROMPT},
+                {"role": "user", "content": topic},
+            ],
+        )
+        query = (response.choices[0].message.content or "").strip().strip('"\'')
+        if not query or len(query) > 120:
+            return ""
+        console.print(f"[dim]PubMed 검색어 번역: {topic[:30]} → {query}[/dim]")
+        return query
+    except Exception:
+        return ""
 
 console = Console(legacy_windows=False)
 
@@ -183,7 +207,14 @@ def run_research_agent(topic: str) -> ResearchOutput:
     """선택된 주제로 전체 리서치 수행."""
     client = openai.OpenAI()
 
-    papers = search_papers(_pubmed_query(topic), max_results=4)
+    pubmed_query = _pubmed_query(topic)
+    if pubmed_query == topic:
+        # 고정 사전에 매칭되는 성분이 없었다는 뜻 — 한글 원문 그대로는 PubMed에서 결과가 거의 없으므로 번역 시도
+        translated = _translate_pubmed_query(client, topic)
+        if translated:
+            pubmed_query = translated
+
+    papers = search_papers(pubmed_query, max_results=4)
     if papers:
         console.print(f"[dim]PubMed 논문 {len(papers)}편 확보[/dim]")
         paper_block = "=== PubMed 논문 목록 ===\n" + "\n".join(p.format_for_prompt() for p in papers)
@@ -202,7 +233,9 @@ def run_research_agent(topic: str) -> ResearchOutput:
         ],
     )
     raw = response.choices[0].message.content or ""
-    return _parse(raw.strip(), fallback_topic=topic)
+    result = _parse(raw.strip(), fallback_topic=topic)
+    result.paper_titles = [p.title for p in papers]
+    return result
 
 
 _URL_RE = re.compile(r'\(?https?://\S+\)?')
