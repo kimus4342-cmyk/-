@@ -18,12 +18,6 @@ class ResearchOutput(BaseModel):
     keyword: str = ""  # 주제 선정 단계에서 쓰인 네이버 검색용 핵심 키워드 (이력 기록용)
     paper_titles: list[str] = []  # PubMed에서 실제로 확보한 논문 제목 목록 (검수 단계 인용 대조용)
 
-class ReviewInsights(BaseModel):
-    positive_patterns: str = ""
-    negative_patterns: str = ""
-    common_mistakes: str = ""
-    sources: str = ""  # 검색에서 확인한 URL (없으면 빈 문자열)
-
 class ReviewResult(BaseModel):
     score: int
     feedback: str

@@ -1,22 +1,20 @@
 # config.py — 멀티 에이전트 모델 및 시스템 프롬프트 설정
 
 RESEARCH_MODEL = "gpt-4o-mini-search-preview"
-WRITING_MODEL = "claude-sonnet-4-6"
+WRITING_MODEL = "claude-sonnet-5"
 REVIEW_MODEL = "gpt-4o-mini"
 ENHANCEMENT_SEARCH_MODEL = "gpt-4o-mini-search-preview"
 ENHANCEMENT_MODEL = "gpt-4o"
-REVIEW_COLLECTOR_MODEL = "gpt-4o-mini-search-preview"
 PUBMED_QUERY_MODEL = "gpt-4o-mini"
 
 TOPIC_KEYWORD_MAX_TOKENS = 1600
 TOPIC_SENTENCE_MAX_TOKENS = 1800
 TOPIC_REFINEMENT_MAX_TOKENS = 300
 RESEARCH_MAX_TOKENS = 3500
-WRITING_MAX_TOKENS = 5000
+WRITING_MAX_TOKENS = 7000
 REVIEW_MAX_TOKENS = 12000
 ENHANCEMENT_SEARCH_MAX_TOKENS = 1500
 ENHANCEMENT_MAX_TOKENS = 5000
-REVIEW_COLLECTOR_MAX_TOKENS = 1500
 PUBMED_QUERY_MAX_TOKENS = 40
 
 # ──────────────────────────────────────────────
@@ -313,47 +311,6 @@ Output EXACTLY in this format — no extra text before or after:
 """.strip()
 
 # ──────────────────────────────────────────────
-# ②.5 후기 수집 에이전트 — 실사용 후기 패턴 수집
-# ──────────────────────────────────────────────
-REVIEW_COLLECTOR_SYSTEM_PROMPT = """
-You are a Korean beauty content researcher specializing in the 40-50 age group skincare market.
-
-Your job: search for REAL user review patterns about the given skincare topic from Korean platforms.
-
-Using web_search (2회 필수 — 반드시 실행):
-1. 핵심 성분명 + "올리브영 후기" 또는 "화해 리뷰" 로 검색 (예: "나이아신아마이드 올리브영 후기")
-2. 핵심 성분명 + "네이버 블로그 40대" 로 검색 (예: "나이아신아마이드 네이버 블로그 40대")
-
-검색어 규칙:
-- 주제에서 핵심 성분명 1~3단어만 추출해서 검색할 것
-- 긴 제목이 오면 반드시 핵심 키워드만 추출 (예: "나이아신아마이드의 기미 개선 메커니즘" → "나이아신아마이드")
-
-조사 규칙:
-- 개별 후기 원문 인용 절대 금지
-- % 수치 금지 — "다수", "일부", "초반에 자주" 같은 정성적 표현만 허용
-- 각 패턴은 1~2문장, 간결하게
-- 검색 결과 없으면 해당 항목만 "데이터 부족"으로 표기 (다른 항목은 정상 작성)
-
-Output EXACTLY in this format — no extra text before or after:
-
-=== POSITIVE_PATTERNS ===
-패턴1: [긍정 경험 1]
-패턴2: [긍정 경험 2]
-패턴3: [긍정 경험 3]
-
-=== NEGATIVE_PATTERNS ===
-패턴1: [부정/실패 경험 1]
-패턴2: [부정 경험 2]
-패턴3: [부정 경험 3]
-
-=== COMMON_MISTAKES ===
-[흔한 오해·실수 1~2개]
-
-=== SOURCES ===
-[검색에서 실제 확인한 한국 URL 1~3개. 한 줄에 하나씩. 찾지 못한 경우 "없음"]
-""".strip()
-
-# ──────────────────────────────────────────────
 # ② 작성 에이전트 — 정보성 블로그 글 초안 작성
 # ──────────────────────────────────────────────
 WRITING_SYSTEM_PROMPT = """
@@ -614,7 +571,6 @@ EDITORIAL_ANGLE의 "각도 유형"은 오프닝 훅과 각 섹션의 프레이�
 □ KEY_INSIGHTS에 URL이 있는 논문이 모두 「논문 제목」(저널명, 연도) 형식으로 인용되었는가?
 □ "연구에 따르면" / "한 연구에서" 등 불특정 출처 표현이 글 어디에도 없는가?
 □ 제공된 추천 제품(PRODUCTS)이 모두 "어떻게 고르고 시작할까" 섹션에 이름과 함께 소개되었는가?
-□ REVIEW_INSIGHTS가 제공된 경우, 실사용자 공감 표현으로 글에 반영되었는가?
 
 ## 출력 형식
 - 마크다운

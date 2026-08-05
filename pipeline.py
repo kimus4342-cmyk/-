@@ -7,9 +7,7 @@ from rich.table import Table
 
 from models import ResearchOutput
 from research_agent import run_topic_proposal, run_topic_refinement, run_research_agent
-from review_collector_agent import run_review_collector
-from writing_agent import run_writing_agent, replace_products_in_article
-from product_search_agent import run_product_search_agent
+from writing_agent import run_writing_agent
 from review_agent import run_review_agent
 from enhancement_agent import run_enhancement_agent
 from tistory_agent import post_to_tistory
@@ -100,51 +98,15 @@ def run_pipeline(
     if not research.products:
         console.print("[yellow]경고: 실제 제품을 찾지 못했습니다. 리서치를 다시 실행하거나 주제를 변경하는 것을 권장합니다.[/yellow]")
 
-    # ②.5 후기 수집 에이전트 (실패해도 파이프라인 계속)
-    # selected_topic(사용자 선택 원본)은 짧고 검색에 적합 — refined/research.topic은 긴 제목이라 부적합
-    with _spin(f"'{selected_topic}' 실사용 후기 패턴 수집 중..."):
-        review_insights = run_review_collector(selected_topic, research.skin_concern)
-
-    if review_insights:
-        pos_preview = review_insights.positive_patterns[:60] + ("..." if len(review_insights.positive_patterns) > 60 else "")
-        neg_preview = review_insights.negative_patterns[:60] + ("..." if len(review_insights.negative_patterns) > 60 else "")
-        src_line = (
-            f"\n[dim]출처 URL: {review_insights.sources[:80]}[/dim]"
-            if review_insights.sources
-            else "\n[yellow]출처 URL 없음 — 패턴 신뢰도 낮을 수 있음[/yellow]"
-        )
-        console.print(Panel(
-            f"[bold]긍정 패턴:[/bold] {pos_preview}\n"
-            f"[bold]부정 패턴:[/bold] {neg_preview}"
-            f"{src_line}",
-            title="[bold cyan]②.5 후기 수집 완료[/bold cyan]",
-            border_style="cyan",
-        ))
-    else:
-        console.print("[dim]②.5 후기 수집 건너뜀 — 이후 단계는 정상 진행됩니다.[/dim]")
-
     # ③ 작성 에이전트
     with _spin("콘텐츠 초안 작성 중..."):
-        draft = run_writing_agent(research, review_insights)
+        draft = run_writing_agent(research)
 
     console.print(Panel(
         f"[dim]초안 생성 완료 — {len(draft):,}자[/dim]",
         title="[bold yellow]③ 작성 에이전트 완료[/bold yellow]",
         border_style="yellow",
     ))
-
-    # ③.5 제품 재검색 에이전트
-    with _spin("글 내용 기반 제품 재검색 중..."):
-        updated_products = run_product_search_agent(draft, research)
-    if updated_products:
-        draft = replace_products_in_article(draft, updated_products)
-        console.print(Panel(
-            f"[dim]제품 {len(updated_products)}개 교체 완료[/dim]",
-            title="[bold yellow]③.5 제품 재검색 완료[/bold yellow]",
-            border_style="yellow",
-        ))
-    else:
-        console.print("[dim]③.5 제품 재검색 — 새 제품 없음, 기존 유지[/dim]")
 
     # ④ 고도화 에이전트 (검수보다 먼저 실행 — 고도화가 추가한 내용도 검수를 반드시 거치게 함)
     with _spin("트렌드·SEO·경쟁 분석 및 고도화 중..."):
