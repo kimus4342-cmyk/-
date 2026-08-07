@@ -48,10 +48,6 @@ def _scan_banned_phrases(article: str) -> list[str]:
 def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
     client = OpenAI()
 
-    products_summary = "\n".join(
-        f"- {p.name}: {p.feature}" for p in research.products
-    ) if research.products else "없음"
-
     user_prompt = f"""
 주제 "{research.topic}", 독자 40-50대 한국 여성을 위한 다음 글을 검수해줘.
 이 글은 트렌드·SEO 반영까지 끝난 발행 직전 최종본이다. 발행 전 마지막 게이트이므로,
@@ -67,9 +63,6 @@ def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
 [KEY_INSIGHTS]
 {research.key_insights}
 
-[추천 제품]
-{products_summary}
-
 === 검수 대상 글 ===
 {draft}
 """.strip()
@@ -80,7 +73,7 @@ def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
     ]
     response = client.chat.completions.create(
         model=REVIEW_MODEL,
-        max_tokens=REVIEW_MAX_TOKENS,
+        max_completion_tokens=REVIEW_MAX_TOKENS,
         messages=messages,
     )
     raw = (response.choices[0].message.content or "").strip()
@@ -91,7 +84,7 @@ def run_review_agent(draft: str, research: ResearchOutput) -> ReviewResult:
         console.print("[yellow]검수 응답이 토큰 한도에 걸려 잘렸습니다 — 더 큰 한도로 재시도합니다.[/yellow]")
         response = client.chat.completions.create(
             model=REVIEW_MODEL,
-            max_tokens=REVIEW_MAX_TOKENS + 4000,
+            max_completion_tokens=REVIEW_MAX_TOKENS + 4000,
             messages=messages,
         )
         raw = (response.choices[0].message.content or "").strip()

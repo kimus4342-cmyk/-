@@ -3,6 +3,7 @@ import re
 
 from models import EnhancementResult, ResearchOutput
 from writing_agent import _VAGUE_CITATION_RE, _fix_vague_citations, _INGESTION_RE, _fix_ingestion_content, run_revision
+from search_client import search_completion
 
 _URL_RE = re.compile(r'https?://\S+')
 from config import (
@@ -26,19 +27,27 @@ def run_enhancement_agent(article: str, research: ResearchOutput) -> Enhancement
 {article[:2000]}{'...(이하 생략)' if len(article) > 2000 else ''}
 """.strip()
 
-    search_response = client.chat.completions.create(
+    search_raw = search_completion(
         model=ENHANCEMENT_SEARCH_MODEL,
-        max_tokens=ENHANCEMENT_SEARCH_MAX_TOKENS,
-        messages=[
-            {"role": "system", "content": ENHANCEMENT_SEARCH_PROMPT},
-            {"role": "user", "content": search_user_prompt},
-        ],
+        system=ENHANCEMENT_SEARCH_PROMPT,
+        user=search_user_prompt,
+        max_output_tokens=ENHANCEMENT_SEARCH_MAX_TOKENS,
     )
-    search_raw = (search_response.choices[0].message.content or "").strip()
     trends, seo_keywords, competitor_gaps = _parse_search(search_raw)
 
     # Pass 2: 분석 결과를 글에 반영
     apply_user_prompt = f"""
+=== 원본 리서치 (이 글의 원래 의도 — 트렌드·차별화 반영 시 이 방향과 어긋나지 않게 할 것) ===
+
+[CORE_MESSAGE]
+{research.core_message}
+
+[EDITORIAL_ANGLE]
+{research.editorial_angle}
+
+[KEY_INSIGHTS 요약 — 이미 본문에 반영된 내용이므로 트렌드로 재탕하지 말 것]
+{research.key_insights}
+
 === 경쟁 분석 결과 ===
 
 [TRENDS]
@@ -56,7 +65,7 @@ def run_enhancement_agent(article: str, research: ResearchOutput) -> Enhancement
 
     apply_response = client.chat.completions.create(
         model=ENHANCEMENT_MODEL,
-        max_tokens=ENHANCEMENT_MAX_TOKENS,
+        max_completion_tokens=ENHANCEMENT_MAX_TOKENS,
         messages=[
             {"role": "system", "content": ENHANCEMENT_APPLY_PROMPT},
             {"role": "user", "content": apply_user_prompt},

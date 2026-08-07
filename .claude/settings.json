@@ -28,7 +28,11 @@
       "Bash(dir .git\\\\rebase-merge)",
       "Bash(git commit -m ' *)",
       "Bash(PYTHONIOENCODING=utf-8 python -c ' *)",
-      "Bash(iconv -f cp949 -t utf-8)"
+      "Bash(iconv -f cp949 -t utf-8)",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c \"import ast; [ast.parse\\(open\\(f, encoding='utf-8'\\).read\\(\\), f\\) for f in ['config.py','models.py','research_agent.py','writing_agent.py','pipeline.py','review_agent.py','enhance_only.py']]; print\\('OK'\\)\")",
+      "Bash(python main.py --topic \"세라마이드·콜라겐·지방산\\(세콜지\\) 조합과 피부 장벽\")",
+      "Bash(PYTHONIOENCODING=utf-8 PYTHONUTF8=1 ./.venv/Scripts/python.exe main.py --topic \"세라마이드·콜라겐·지방산\\(세콜지\\) 조합과 피부 장벽\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\qkrrk\\OneDrive\\���� ȭ��\\BLOOMI\\.git"

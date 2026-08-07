@@ -1,7 +1,7 @@
-import openai
 from rich.console import Console
 
 from models import ReviewInsights
+from search_client import search_completion
 from config import (
     REVIEW_COLLECTOR_MODEL,
     REVIEW_COLLECTOR_MAX_TOKENS,
@@ -16,16 +16,12 @@ _MAX_FIELD_LEN = 200
 def run_review_collector(topic: str, skin_concern: str) -> ReviewInsights | None:
     """올리브영·네이버에서 실사용 후기 패턴을 수집한다. 실패 시 None 반환."""
     try:
-        client = openai.OpenAI()
-        response = client.chat.completions.create(
+        raw = search_completion(
             model=REVIEW_COLLECTOR_MODEL,
-            max_tokens=REVIEW_COLLECTOR_MAX_TOKENS,
-            messages=[
-                {"role": "system", "content": REVIEW_COLLECTOR_SYSTEM_PROMPT},
-                {"role": "user", "content": f"주제: {topic}\n피부 고민: {skin_concern}"},
-            ],
+            system=REVIEW_COLLECTOR_SYSTEM_PROMPT,
+            user=f"주제: {topic}\n피부 고민: {skin_concern}",
+            max_output_tokens=REVIEW_COLLECTOR_MAX_TOKENS,
         )
-        raw = (response.choices[0].message.content or "").strip()
         return _parse(raw)
     except Exception as e:
         console.print(f"[yellow]후기 수집 실패 — 이 단계를 건너뜁니다. ({e})[/yellow]")

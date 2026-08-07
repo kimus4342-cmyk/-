@@ -12,21 +12,26 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from models import ResearchOutput, Product
+from models import ResearchOutput
 from enhancement_agent import run_enhancement_agent
 
 load_dotenv()
 console = Console(legacy_windows=False, force_terminal=True)
 
 
+ARTICLES_DIR = "articles"
+
+
 def find_latest_article() -> tuple[str, str] | None:
-    """가장 최근 생성된 주제명_YYYYMMDD_NNN.md 파일과 주제명 반환."""
+    """articles/ 폴더에서 가장 최근 생성된 주제명_YYYYMMDD_NNN.md 파일과 주제명 반환."""
+    if not os.path.isdir(ARTICLES_DIR):
+        return None
     pattern = re.compile(r"^(.+)_(\d{8})_(\d{3})\.md$")
     candidates = []
-    for f in os.listdir("."):
+    for f in os.listdir(ARTICLES_DIR):
         m = pattern.match(f)
         if m:
-            candidates.append((m.group(2), m.group(3), f, m.group(1)))
+            candidates.append((m.group(2), m.group(3), os.path.join(ARTICLES_DIR, f), m.group(1)))
     if not candidates:
         return None
     candidates.sort(reverse=True)
@@ -44,11 +49,12 @@ def load_article(filename: str) -> str:
 
 
 def save_enhanced(content: str, topic: str, source_filename: str) -> str:
+    os.makedirs(ARTICLES_DIR, exist_ok=True)
     safe_name = re.sub(r"[^\w가-힣]", "_", topic)
     date = datetime.now().strftime("%Y%m%d")
-    existing = len([f for f in os.listdir(".") if re.match(rf"{re.escape(safe_name)}_{date}_\d{{3}}\.md", f)])
+    existing = len([f for f in os.listdir(ARTICLES_DIR) if re.match(rf"{re.escape(safe_name)}_{date}_\d{{3}}\.md", f)])
     number = f"{existing + 1:03d}"
-    filename = f"{safe_name}_{date}_{number}.md"
+    filename = os.path.join(ARTICLES_DIR, f"{safe_name}_{date}_{number}.md")
     with open(filename, "w", encoding="utf-8") as f:
         f.write(f"# BLOOMI 큐레이션 — {topic} (고도화)\n\n")
         f.write(f"> 원본: `{source_filename}`\n\n")
@@ -64,12 +70,17 @@ def main():
     # 파일 지정: python enhance_only.py 파일명.md  또는 자동 탐색
     if len(sys.argv) > 1:
         source_file = sys.argv[1]
-        topic = re.sub(r"_\d{8}_\d{3}\.md$", "", source_file).replace("_", " ")
+        # 파일명만 준 경우 articles/ 폴더에서 찾아본다
+        if not os.path.exists(source_file):
+            in_articles = os.path.join(ARTICLES_DIR, source_file)
+            if os.path.exists(in_articles):
+                source_file = in_articles
+        topic = re.sub(r"_\d{8}_\d{3}\.md$", "", os.path.basename(source_file)).replace("_", " ")
     else:
         result = find_latest_article()
         if not result:
-            console.print("[bold red]오류:[/bold red] 현재 디렉터리에 생성된 .md 파일이 없습니다.")
-            console.print("  → python enhance_only.py 파일명.md 으로 직접 지정하세요.")
+            console.print(f"[bold red]오류:[/bold red] {ARTICLES_DIR}/ 폴더에 생성된 .md 파일이 없습니다.")
+            console.print(f"  → python enhance_only.py {ARTICLES_DIR}/파일명.md 으로 직접 지정하세요.")
             return
         source_file, topic = result
 
@@ -94,7 +105,6 @@ def main():
         core_message="",
         key_insights="",
         editorial_angle="",
-        products=[],
     )
 
     console.print()

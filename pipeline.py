@@ -8,8 +8,7 @@ from rich.table import Table
 from models import ResearchOutput
 from research_agent import run_topic_proposal, run_topic_refinement, run_research_agent
 from review_collector_agent import run_review_collector
-from writing_agent import run_writing_agent, replace_products_in_article
-from product_search_agent import run_product_search_agent
+from writing_agent import run_writing_agent
 from review_agent import run_review_agent
 from enhancement_agent import run_enhancement_agent
 from tistory_agent import post_to_tistory
@@ -44,17 +43,14 @@ def run_pipeline(
             table.add_column("주제", width=18)
             table.add_column("유형", width=10)
             table.add_column("각도", width=10)
-            table.add_column("네이버 상승지수", width=12, justify="center")
             table.add_column("선정 이유", width=44)
 
             for i, c in enumerate(candidates, 1):
-                naver_score = c.get("naver_score")
                 table.add_row(
                     str(i),
                     c.get("topic", "—"),
                     c.get("type", "—"),
                     c.get("angle", "—"),
-                    f"{naver_score}" if naver_score is not None else "—",
                     c.get("reason", "—"),
                 )
 
@@ -89,16 +85,12 @@ def run_pipeline(
         research = run_research_agent(refined_topic)
     research.keyword = selected_keyword
 
-    product_summary = ', '.join(p.name for p in research.products) if research.products else "[red]제품 없음 — 작성 단계에서 기준만 제시됩니다[/red]"
     console.print(Panel(
         f"[bold]선정 주제:[/bold] {research.topic}\n"
-        f"[bold]피부 고민:[/bold] {research.skin_concern}\n"
-        f"[bold]추천 제품:[/bold] {product_summary}",
+        f"[bold]피부 고민:[/bold] {research.skin_concern}",
         title="[bold cyan]② 리서치 에이전트 완료[/bold cyan]",
         border_style="cyan",
     ))
-    if not research.products:
-        console.print("[yellow]경고: 실제 제품을 찾지 못했습니다. 리서치를 다시 실행하거나 주제를 변경하는 것을 권장합니다.[/yellow]")
 
     # ②.5 후기 수집 에이전트 (실패해도 파이프라인 계속)
     # selected_topic(사용자 선택 원본)은 짧고 검색에 적합 — refined/research.topic은 긴 제목이라 부적합
@@ -132,19 +124,6 @@ def run_pipeline(
         title="[bold yellow]③ 작성 에이전트 완료[/bold yellow]",
         border_style="yellow",
     ))
-
-    # ③.5 제품 재검색 에이전트
-    with _spin("글 내용 기반 제품 재검색 중..."):
-        updated_products = run_product_search_agent(draft, research)
-    if updated_products:
-        draft = replace_products_in_article(draft, updated_products)
-        console.print(Panel(
-            f"[dim]제품 {len(updated_products)}개 교체 완료[/dim]",
-            title="[bold yellow]③.5 제품 재검색 완료[/bold yellow]",
-            border_style="yellow",
-        ))
-    else:
-        console.print("[dim]③.5 제품 재검색 — 새 제품 없음, 기존 유지[/dim]")
 
     # ④ 고도화 에이전트 (검수보다 먼저 실행 — 고도화가 추가한 내용도 검수를 반드시 거치게 함)
     with _spin("트렌드·SEO·경쟁 분석 및 고도화 중..."):

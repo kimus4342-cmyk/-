@@ -1,12 +1,5 @@
 from pydantic import BaseModel, field_validator
 
-class Product(BaseModel):
-    name: str
-    feature: str
-    price: str
-    url: str
-    ingredients: str = ""  # 주요 성분 목록 (레티놀 농도 + 보습/진정 성분 등)
-
 class ResearchOutput(BaseModel):
     topic: str
     topic_type: str = ""  # 성분심화 / 카테고리비교 / 고민해결 / 뷰티디바이스
@@ -14,7 +7,7 @@ class ResearchOutput(BaseModel):
     core_message: str
     key_insights: str
     editorial_angle: str = ""  # 각도 유형 + 선택 이유 + 오프닝 훅
-    products: list[Product]
+    reader_questions: str = ""  # 독자가 검색 전 궁금해할 질문 5개 — 작성 단계 섹션 흐름 설계용
     keyword: str = ""  # 주제 선정 단계에서 쓰인 네이버 검색용 핵심 키워드 (이력 기록용)
     paper_titles: list[str] = []  # PubMed에서 실제로 확보한 논문 제목 목록 (검수 단계 인용 대조용)
 

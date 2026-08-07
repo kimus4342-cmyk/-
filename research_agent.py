@@ -3,10 +3,11 @@ import random
 import re
 from rich.console import Console
 
-from models import ResearchOutput, Product
+from models import ResearchOutput
 from pubmed_client import search_papers
 from topic_history import load_recent_keywords
 from naver_trend import get_trend_scores, is_configured as naver_configured
+from search_client import search_completion
 from config import (
     RESEARCH_MODEL,
     RESEARCH_MAX_TOKENS,
@@ -62,7 +63,7 @@ def _translate_pubmed_query(client: openai.OpenAI, topic: str) -> str:
     try:
         response = client.chat.completions.create(
             model=PUBMED_QUERY_MODEL,
-            max_tokens=PUBMED_QUERY_MAX_TOKENS,
+            max_completion_tokens=PUBMED_QUERY_MAX_TOKENS,
             messages=[
                 {"role": "system", "content": PUBMED_QUERY_PROMPT},
                 {"role": "user", "content": topic},
@@ -78,28 +79,6 @@ def _translate_pubmed_query(client: openai.OpenAI, topic: str) -> str:
 
 console = Console(legacy_windows=False)
 
-_PLACEHOLDER_NAMES = {"제품 a", "제품 b", "제품 c", "제품a", "제품b", "제품c"}
-_PLACEHOLDER_KEYWORDS = ["브랜드명", "제품명", "정확한", "플레이스홀더", "브랜드 +", "example", "sample"]
-
-
-def _is_placeholder(name: str) -> bool:
-    n = name.strip().lower()
-    if n in _PLACEHOLDER_NAMES:
-        return True
-    if n.startswith("[") or n.startswith("("):
-        return True
-    return any(kw in n for kw in _PLACEHOLDER_KEYWORDS)
-
-
-def _sanitize_url(url: str) -> str:
-    """300자 초과이거나 0이 20개 이상 연속되면 가짜 URL로 판단해 빈 문자열 반환."""
-    if len(url) > 300:
-        return ""
-    if "0" * 20 in url:
-        return ""
-    return url
-
-
 _TOPIC_CATEGORIES = [
     "미백·기미·칙칙함",
     "주름·탄력·리프팅",
@@ -114,38 +93,40 @@ _TOPIC_CATEGORIES = [
 
 
 def run_topic_proposal() -> list[dict]:
-    """1) 트렌드 키워드 10개 브레인스토밍 → 2) 네이버 최근 상승 지수로 상위 5개 선별
-    → 3) 살아남은 키워드로만 주제 문장 완성. 실행마다 랜덤 카테고리로 다양성 확보."""
+    """1) 트렌드 키워드 10개 브레인스토밍 → 2) 상위 5개 선별
+    → 3) 살아남은 키워드로만 주제 문장 완성. 실행마다 랜덤 카테고리로 다양성 확보.
+
+    [네이버 상승 지수 랭킹 — 임시 비활성화 (2026-08 실험)]
+    아래 _attach_naver_scores() 호출을 빼서 주제 선정에 네이버 점수가 영향을 주지 않게 했다.
+    _rank_and_trim()은 점수가 없으면 LLM이 제시한 원래 순서 그대로 상위 5개를 쓴다.
+    되돌리려면 주석 처리된 한 줄만 다시 켜면 된다."""
     client = openai.OpenAI()
     category = random.choice(_TOPIC_CATEGORIES)
     console.print(f"[dim]이번 주제 탐색 카테고리: {category}[/dim]")
 
     recent_keywords = load_recent_keywords()
-    keywords = _propose_keywords(client, category, recent_keywords)
+    keywords = _propose_keywords(category, recent_keywords)
     if not keywords:
         return []
 
-    _attach_naver_scores(keywords)
+    # _attach_naver_scores(keywords)  # 임시 비활성화 — 되돌리려면 주석 해제
     top_keywords = _rank_and_trim(keywords)
     return _write_sentences(client, top_keywords)
 
 
-def _propose_keywords(client: openai.OpenAI, category: str, recent_keywords: list[str]) -> list[dict]:
+def _propose_keywords(category: str, recent_keywords: list[str]) -> list[dict]:
     history_block = ""
     if recent_keywords:
         history_block = (
             "\n\n아래는 최근에 이미 다룬 키워드입니다. 절대 다시 제안하지 마세요:\n"
             + "\n".join(f"- {k}" for k in recent_keywords)
         )
-    response = client.chat.completions.create(
+    raw = search_completion(
         model=RESEARCH_MODEL,
-        max_tokens=TOPIC_KEYWORD_MAX_TOKENS,
-        messages=[
-            {"role": "system", "content": TOPIC_KEYWORD_PROMPT},
-            {"role": "user", "content": f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 키워드 후보 10개를 제안해줘. 10개 중 2~3개는 [{category}] 관련 유형을 포함하고, 나머지는 다양하게 선택해줘.{history_block}"},
-        ],
+        system=TOPIC_KEYWORD_PROMPT,
+        user=f"지금 4050 한국 여성에게 핫한 스킨케어 트렌드를 조사하고 키워드 후보 10개를 제안해줘. 10개 중 2~3개는 [{category}] 관련 유형을 포함하고, 나머지는 다양하게 선택해줘.{history_block}",
+        max_output_tokens=TOPIC_KEYWORD_MAX_TOKENS,
     )
-    raw = (response.choices[0].message.content or "").strip()
     return _filter_keywords(_parse_blocks(raw), recent_keywords)
 
 
@@ -162,7 +143,7 @@ def _write_sentences(client: openai.OpenAI, top_keywords: list[dict]) -> list[di
     )
     response = client.chat.completions.create(
         model=RESEARCH_MODEL,
-        max_tokens=TOPIC_SENTENCE_MAX_TOKENS,
+        max_completion_tokens=TOPIC_SENTENCE_MAX_TOKENS,
         messages=[
             {"role": "system", "content": TOPIC_SENTENCE_PROMPT},
             {"role": "user", "content": user_content},
@@ -184,17 +165,13 @@ def _write_sentences(client: openai.OpenAI, top_keywords: list[dict]) -> list[di
 
 def run_topic_refinement(topic: str) -> str:
     """주제를 경쟁 콘텐츠 분석 기반으로 심화·각도화한다. 실패 시 원래 주제 반환."""
-    client = openai.OpenAI()
     try:
-        response = client.chat.completions.create(
+        refined = search_completion(
             model=RESEARCH_MODEL,
-            max_tokens=TOPIC_REFINEMENT_MAX_TOKENS,
-            messages=[
-                {"role": "system", "content": TOPIC_REFINEMENT_PROMPT},
-                {"role": "user", "content": f"주제: {topic}"},
-            ],
+            system=TOPIC_REFINEMENT_PROMPT,
+            user=f"주제: {topic}",
+            max_output_tokens=TOPIC_REFINEMENT_MAX_TOKENS,
         )
-        refined = (response.choices[0].message.content or "").strip()
         # 너무 짧거나 원래 주제보다 짧으면 원래 주제 반환
         if len(refined) < len(topic) or len(refined) > 80:
             return topic
@@ -224,15 +201,12 @@ def run_research_agent(topic: str) -> ResearchOutput:
 
     user_content = f"선정된 주제: {topic} (피부에 바르는 스킨케어 화장품 기준, 먹는 보충제 제외)\n\n{paper_block}\n\n이 주제로 리서치를 진행해줘."
 
-    response = client.chat.completions.create(
+    raw = search_completion(
         model=RESEARCH_MODEL,
-        max_tokens=RESEARCH_MAX_TOKENS,
-        messages=[
-            {"role": "system", "content": RESEARCH_SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
+        system=RESEARCH_SYSTEM_PROMPT,
+        user=user_content,
+        max_output_tokens=RESEARCH_MAX_TOKENS,
     )
-    raw = response.choices[0].message.content or ""
     result = _parse(raw.strip(), fallback_topic=topic)
     result.paper_titles = [p.title for p in papers]
     return result
@@ -365,43 +339,7 @@ def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:
     core_message = "\n".join(sections.get("CORE_MESSAGE", [])).strip()
     key_insights = "\n".join(sections.get("KEY_INSIGHTS", [])).strip()
     editorial_angle = "\n".join(sections.get("EDITORIAL_ANGLE", [])).strip()
-
-    # 제품 섹션 raw 출력 로그
-    raw_products_lines = sections.get("PRODUCTS", [])
-    if raw_products_lines:
-        console.print("[dim]─── PRODUCTS raw 출력 ───[/dim]")
-        for l in raw_products_lines:
-            if l.strip():
-                console.print(f"[dim]{l}[/dim]")
-        console.print("[dim]─────────────────────────[/dim]")
-    else:
-        console.print("[yellow]PRODUCTS 섹션 자체가 없음 — 모델이 섹션을 출력하지 않았습니다[/yellow]")
-
-    products: list[Product] = []
-    for line in raw_products_lines:
-        line = line.strip()
-        if not line or not line[0].isdigit():
-            continue
-        body = line.split(".", 1)[1].strip() if "." in line else line
-        parts = [p.strip() for p in body.split("|")]
-        if len(parts) >= 4:
-            products.append(Product(
-                name=parts[0],
-                feature=parts[1],
-                price=parts[2],
-                url=_sanitize_url(parts[3]),
-                ingredients=parts[4] if len(parts) >= 5 else "",
-            ))
-        else:
-            console.print(f"[yellow]제품 파싱 실패 (구분자 부족, {len(parts)}개): {line[:80]}[/yellow]")
-
-    valid_products = [p for p in products if not _is_placeholder(p.name)]
-    if len(valid_products) < len(products):
-        console.print(f"[yellow]경고: 플레이스홀더 제품명 {len(products) - len(valid_products)}개 감지 — 제외됨[/yellow]")
-        for p in products:
-            if _is_placeholder(p.name):
-                console.print(f"[yellow]  필터됨: {p.name}[/yellow]")
-    products = valid_products
+    reader_questions = "\n".join(sections.get("READER_QUESTIONS", [])).strip()
 
     if not topic:
         if fallback_topic:
@@ -419,5 +357,5 @@ def _parse(raw: str, fallback_topic: str = "") -> ResearchOutput:
         core_message=core_message,
         key_insights=key_insights,
         editorial_angle=editorial_angle,
-        products=products,
+        reader_questions=reader_questions,
     )

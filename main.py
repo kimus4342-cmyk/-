@@ -21,12 +21,16 @@ load_dotenv()
 console = Console(legacy_windows=False, force_terminal=True)
 
 
+ARTICLES_DIR = "articles"
+
+
 def save_output(content: str, topic: str) -> str:
+    os.makedirs(ARTICLES_DIR, exist_ok=True)
     safe_name = re.sub(r"[^\w가-힣]", "_", topic)
     date = datetime.now().strftime("%Y%m%d")
-    existing = len([f for f in os.listdir(".") if re.match(rf"{re.escape(safe_name)}_{date}_\d{{3}}\.md", f)])
+    existing = len([f for f in os.listdir(ARTICLES_DIR) if re.match(rf"{re.escape(safe_name)}_{date}_\d{{3}}\.md", f)])
     number = f"{existing + 1:03d}"
-    filename = f"{safe_name}_{date}_{number}.md"
+    filename = os.path.join(ARTICLES_DIR, f"{safe_name}_{date}_{number}.md")
     with open(filename, "w", encoding="utf-8") as f:
         f.write(f"# BLOOMI 큐레이션 — {topic}\n\n")
         f.write(content)
@@ -50,10 +54,16 @@ def main():
 
     # 기존 저장 파일을 티스토리에 등록 (단독 실행, OpenAI API 키 불필요)
     if args.post_file:
-        if not os.path.exists(args.post_file):
-            console.print(f"[red]파일을 찾을 수 없습니다:[/red] {args.post_file}")
-            return
-        tistory_upload(args.post_file, public=args.public)
+        post_file = args.post_file
+        if not os.path.exists(post_file):
+            # 파일명만 준 경우 articles/ 폴더에서 찾아본다
+            in_articles = os.path.join(ARTICLES_DIR, post_file)
+            if os.path.exists(in_articles):
+                post_file = in_articles
+            else:
+                console.print(f"[red]파일을 찾을 수 없습니다:[/red] {args.post_file}")
+                return
+        tistory_upload(post_file, public=args.public)
         return
 
     if not os.getenv("OPENAI_API_KEY"):
@@ -81,16 +91,13 @@ def main():
         table.add_column("주제", width=26)
         table.add_column("유형", width=12)
         table.add_column("각도", width=12)
-        table.add_column("네이버 상승지수", width=12, justify="center")
         table.add_column("선정 이유", width=38)
         for i, c in enumerate(candidates, 1):
-            naver_score = c.get("naver_score")
             table.add_row(
                 str(i),
                 c.get("topic", "—"),
                 c.get("type", "—"),
                 c.get("angle", "—"),
-                f"{naver_score}" if naver_score is not None else "—",
                 c.get("reason", "—"),
             )
         console.print()

@@ -11,7 +11,25 @@
       "Bash(git fetch *)",
       "Bash(git remote *)",
       "Bash(python3 -c ' *)",
-      "Bash(python3 -m py_compile review_agent.py research_agent.py models.py config.py)"
+      "Bash(python3 -m py_compile review_agent.py research_agent.py models.py config.py)",
+      "Bash(python -c \"import config, models, research_agent, writing_agent; print\\('OK'\\)\")",
+      "Bash(python -c \"import config, models, research_agent, writing_agent, pipeline, main; print\\('OK'\\)\")",
+      "Bash(grep -E '_[0-9]{8}_[0-9]{3}\\\\.md$')",
+      "Bash(git mv *)",
+      "Bash(python -c \"import main, enhance_only; print\\('OK'\\)\")",
+      "Bash(echo \"exit:$?\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('config.py', encoding='utf-8'\\).read\\(\\)\\); print\\('OK syntax'\\)\")",
+      "Bash(python -c \"import openai, pydantic, rich, dotenv; print\\('deps ok'\\)\")",
+      "Bash(cat /tmp/pdrn_rerun.log)",
+      "Read(//tmp/**)",
+      "Bash(cd \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI\" && tail -80 /tmp/pdrn_rerun2.log)",
+      "Bash(cd \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI\" && grep -a -E \"초안 생성 완료|고도화 완료|검수 점수|저장 완료\" /tmp/pdrn_rerun2.log)",
+      "Bash(cd \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI\" && grep -a -n \"검수 에이전트 완료\" -A 30 /tmp/pdrn_rerun2.log | head -60)",
+      "Bash(cd \"/c/Users/qkrrk/OneDrive/바탕 화면/BLOOMI\" && grep -a -n \"토큰 한도\" /tmp/pdrn_rerun2.log)",
+      "Bash(tail -60 /tmp/pdrn_debug.log)",
+      "WebSearch",
+      "Bash(python3 -c \"import anthropic; print\\(anthropic.__version__\\)\")",
+      "Bash(PYTHONIOENCODING=utf-8 python3 -c ' *)"
     ]
   }
 }

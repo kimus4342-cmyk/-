@@ -27,7 +27,7 @@ python main.py
 
 Windows에서는 `run.bat` 사용 가능.
 
-생성된 글은 `주제명_YYYYMMDD_NNN.md` 형식으로 저장된다. (예: `히알루론산_20260510_001.md`)
+생성된 글은 `articles/주제명_YYYYMMDD_NNN.md` 형식으로 저장된다. (예: `articles/히알루론산_20260510_001.md`)
 
 ## 파일 구조
 
