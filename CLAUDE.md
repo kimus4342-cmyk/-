@@ -46,11 +46,13 @@ Windows에서는 `run.bat` 사용 가능.
 
 | 상수 | 기본값 | 용도 |
 |------|--------|------|
-| `RESEARCH_MODEL` | `gpt-4o-mini-search-preview` | 웹 검색 포함 리서치 |
-| `WRITING_MODEL` | `gpt-4o` | 블로그 초안 작성 |
-| `REVIEW_MODEL` | `gpt-4o` | 24항목 체크리스트 검수 |
-| `ENHANCEMENT_SEARCH_MODEL` | `gpt-4o-mini-search-preview` | 트렌드·SEO·경쟁 분석 (웹 검색) |
-| `ENHANCEMENT_MODEL` | `gpt-4o` | 분석 결과 글 반영 |
+| `RESEARCH_MODEL` | `gpt-5.6-luna` | 웹 검색 포함 리서치 |
+| `WRITING_MODEL` | `claude-sonnet-5` | 블로그 초안 작성 |
+| `REVIEW_MODEL` | `gpt-5.4-mini` | 27항목 체크리스트 검수 |
+| `ENHANCEMENT_SEARCH_MODEL` | `gpt-5.6-luna` | 트렌드·SEO·경쟁 분석 (웹 검색) |
+| `ENHANCEMENT_MODEL` | `gpt-5.6-terra` | 분석 결과 글 반영 |
+| `REVIEW_COLLECTOR_MODEL` | `gpt-5.6-luna` | 실사용 후기 패턴 수집 (웹 검색) |
+| `PUBMED_QUERY_MODEL` | `gpt-5.4-mini` | PubMed 검색어 한→영 번역 |
 
 ## 데이터 모델 (`models.py`)
 
@@ -82,6 +84,7 @@ Windows에서는 `run.bat` 사용 가능.
 - **검수 프롬프트**: 체크리스트 항목 수 변경 시 판정 기준(Yes 23개 이상 등) 수치도 함께 조정
 - **고도화 검색 프롬프트** (`ENHANCEMENT_SEARCH_PROMPT`): 출력 섹션(`=== TRENDS ===` 등) 변경 시 `enhancement_agent.py`의 `_parse_search()` 로직도 함께 수정
 - **고도화 반영 프롬프트** (`ENHANCEMENT_APPLY_PROMPT`): 출력 섹션(`=== ENHANCED_ARTICLE ===`) 변경 시 `_parse_enhanced()` 로직도 함께 수정
+- **모델 상수** (`RESEARCH_MODEL`·`WRITING_MODEL`·`REVIEW_MODEL`·`ENHANCEMENT_SEARCH_MODEL`·`ENHANCEMENT_MODEL`·`REVIEW_COLLECTOR_MODEL`·`PUBMED_QUERY_MODEL`): 값 변경 시 위 "모델 설정" 표도 함께 갱신
 
 ## 주의사항
 
